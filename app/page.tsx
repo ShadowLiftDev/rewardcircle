@@ -88,10 +88,10 @@ export default function RewardCircleLanding() {
                 Enter the Experience
               </Link>
               <Link
-                href={`/orgs/${DEFAULT_ORG}/loyalty`}
+                href={`/rewardcircle/demo`}
                 className="rounded-xl border border-cyan-400/60 bg-slate-950/80 px-5 py-2.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400 hover:text-slate-950"
               >
-                Enter the Experience (Live)
+                Can You Show Me?
               </Link>
               {/* optional 3rd button; delete if you only want 2 */}
               {/* <Link
