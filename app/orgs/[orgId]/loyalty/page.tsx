@@ -35,20 +35,6 @@ export default function LoyaltyHomePage({ params }: LoyaltyHomePageProps) {
           </Link>
 
           <Link
-            href={`/orgs/${orgId}/loyalty/staff/earn`}
-            className="rounded-lg border border-slate-500 px-4 py-3 text-center text-sm text-slate-100 hover:bg-white hover:text-slate-950 transition"
-          >
-            I’m Staff – Add Points
-          </Link>
-
-          <Link
-            href={`/orgs/${orgId}/loyalty/staff/redeem`}
-            className="rounded-lg border border-slate-500 px-4 py-3 text-center text-sm text-slate-100 hover:bg-white hover:text-slate-950 transition"
-          >
-            I’m Staff – Redeem Rewards
-          </Link>
-
-          <Link
             href={`/orgs/${orgId}/loyalty/admin`}
             className="rounded-lg border border-emerald-500/60 px-4 py-3 text-center text-sm text-emerald-200 hover:bg-emerald-500 hover:text-slate-950 transition"
           >
