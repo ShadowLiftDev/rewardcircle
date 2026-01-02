@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 
 import { NeonSection } from "@/components/neon/NeonSection";
 import { NeonCard } from "@/components/neon/NeonCard";
+import type { ProgramSettings } from "@/lib/types";
 
 type RewardStoreItem = {
   id: string;
@@ -36,7 +37,9 @@ export default function CustomerWalletPage() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [programSettings, setProgramSettings] = useState<any>(null);
+  const [programSettings, setProgramSettings] = useState<ProgramSettings | null>(
+    null,
+  );
   const [customer, setCustomer] = useState<LoadedCustomer | null>(null);
   const [rewards, setRewards] = useState<RewardStoreItem[]>([]);
 
@@ -74,14 +77,14 @@ export default function CustomerWalletPage() {
       if (!res.ok || !data.found) {
         setLoadError(
           data?.error ||
-            "We couldn’t find a wallet for that contact. Ask staff to add points for you first."
+            "We couldn’t find a wallet for that contact. Ask staff to add points for you first.",
         );
         return;
       }
 
-      setCustomer(data.customer);
-      setProgramSettings(data.program);
-      setRewards(data.rewards ?? []);
+      setCustomer(data.customer as LoadedCustomer);
+      setProgramSettings(data.program as ProgramSettings);
+      setRewards((data.rewards ?? []) as RewardStoreItem[]);
     } catch (e: any) {
       setLoadError(e?.message || "Failed to load your wallet.");
     } finally {
@@ -95,22 +98,39 @@ export default function CustomerWalletPage() {
     performLookup(phoneOrEmail);
   }
 
-  // Tier logic (unchanged)
+  // ---------- TIER LOGIC ----------
   const tierInfo = useMemo(() => {
-    if (!customer || !programSettings) {
+    // No customer at all – fall back to a basic default
+    if (!customer) {
       return {
-        currentTierLabel: customer?.currentTier.toUpperCase() ?? "TIER 1",
-        nextTierLabel: null,
+        currentTierLabel: "TIER 1",
+        nextTierLabel: null as string | null,
         currentThreshold: 0,
         nextThreshold: 0,
       };
     }
 
-    const { tierThresholds, tierNames } = programSettings;
+    // Customer exists but we don't have settings yet
+    if (!programSettings) {
+      return {
+        currentTierLabel: customer.currentTier.toUpperCase(),
+        nextTierLabel: null as string | null,
+        currentThreshold: 0,
+        nextThreshold: 0,
+      };
+    }
+
+    // Ensure numeric thresholds & safe names
+    const tierThresholds: Record<string, number> =
+      programSettings.tierThresholds ?? {};
+    const tierNames: Record<string, string> = programSettings.tierNames ?? {};
+
     const key = customer.currentTier;
     const currentThreshold = tierThresholds[key] ?? 0;
 
-    const sorted = Object.entries(tierThresholds).sort((a, b) => a[1] - b[1]);
+    const sorted = Object.entries(tierThresholds).sort(
+      ([, aVal], [, bVal]) => aVal - bVal,
+    );
 
     let nextKey: string | null = null;
     for (const [tKey, threshold] of sorted) {
@@ -121,10 +141,14 @@ export default function CustomerWalletPage() {
     }
 
     return {
-      currentTierLabel: tierNames?.[key] ?? key.toUpperCase(),
-      nextTierLabel: nextKey ? tierNames?.[nextKey] ?? nextKey.toUpperCase() : null,
+      currentTierLabel: tierNames[key] ?? key.toUpperCase(),
+      nextTierLabel: nextKey
+        ? tierNames[nextKey] ?? nextKey.toUpperCase()
+        : null,
       currentThreshold,
-      nextThreshold: nextKey ? tierThresholds[nextKey] : currentThreshold,
+      nextThreshold: nextKey
+        ? tierThresholds[nextKey] ?? currentThreshold
+        : currentThreshold,
     };
   }, [customer, programSettings]);
 
@@ -145,7 +169,7 @@ export default function CustomerWalletPage() {
       .sort((a, b) => a.pointsCost - b.pointsCost);
 
     if (above.length) return above[0];
-    return rewards.sort((a, b) => a.pointsCost - b.pointsCost)[0];
+    return [...rewards].sort((a, b) => a.pointsCost - b.pointsCost)[0];
   }, [customer, rewards]);
 
   return (
@@ -157,7 +181,8 @@ export default function CustomerWalletPage() {
         </p>
         <h1 className="text-2xl font-semibold">Your RewardCircle Wallet</h1>
         <p className="text-sm text-slate-300/80">
-          Enter your phone/email to view your points, tier, and available rewards.
+          Enter your phone/email to view your points, tier, and available
+          rewards.
         </p>
       </div>
 
@@ -168,7 +193,7 @@ export default function CustomerWalletPage() {
           className="flex flex-col gap-3 sm:flex-row sm:items-end"
         >
           <div className="flex-1">
-            <label className="block mb-1 text-xs text-slate-300/90">
+            <label className="mb-1 block text-xs text-slate-300/90">
               Phone or Email
             </label>
             <input
@@ -205,7 +230,7 @@ export default function CustomerWalletPage() {
             </div>
 
             <div className="text-right">
-              <div className="text-xs text-slate-400 uppercase">
+              <div className="text-xs uppercase text-slate-400">
                 Current Tier
               </div>
               <div className="text-2xl font-bold text-cyan-300">
@@ -216,7 +241,7 @@ export default function CustomerWalletPage() {
 
           {/* Progress bar */}
           <div className="mt-4">
-            <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden">
+            <div className="h-3 w-full overflow-hidden rounded-full bg-slate-800">
               <div
                 className="h-full bg-gradient-to-r from-cyan-400 via-emerald-400 to-purple-400"
                 style={{ width: `${progressPercent}%` }}
@@ -235,14 +260,17 @@ export default function CustomerWalletPage() {
 
           {/* Balance box */}
           <div className="mt-4 rounded-xl border border-cyan-400/40 bg-slate-950/70 p-3">
-            <div className="text-xs text-slate-400 uppercase">
+            <div className="text-xs uppercase text-slate-400">
               Points Available
             </div>
-            <div className="text-3xl font-extrabold">{customer.pointsBalance}</div>
+            <div className="text-3xl font-extrabold">
+              {customer.pointsBalance}
+            </div>
 
             {nextReward && (
               <p className="mt-1 text-xs text-slate-300/80">
-                Next reward: <span className="font-semibold">{nextReward.name}</span> (
+                Next reward:{" "}
+                <span className="font-semibold">{nextReward.name}</span> (
                 {nextReward.pointsCost} pts)
               </p>
             )}
@@ -296,8 +324,8 @@ export default function CustomerWalletPage() {
                     <span
                       className={`rounded-full px-2 py-0.5 text-[11px] ${
                         canAfford
-                          ? "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40"
-                          : "bg-slate-800 text-slate-400 border border-slate-700"
+                          ? "border border-emerald-500/40 bg-emerald-500/20 text-emerald-200"
+                          : "border border-slate-700 bg-slate-800 text-slate-400"
                       }`}
                     >
                       {canAfford ? "You can redeem" : "Keep earning"}
