@@ -1,4 +1,8 @@
-import Link from "next/link";
+"use client";
+
+import { useRouter } from "next/navigation";
+import Link from "next/link"; 
+
 
 const DEFAULT_ORG =
   process.env.NEXT_PUBLIC_DEFAULT_ORG_ID ?? "neon-lunchbox";
@@ -85,14 +89,21 @@ export default function RewardCircleLanding() {
                 href={`/orgs/${DEFAULT_ORG}/loyalty`}
                 className="rounded-xl bg-gradient-to-r from-cyan-400 via-sky-400 to-purple-400 px-5 py-2.5 text-sm font-semibold text-slate-950 shadow-[0_0_40px_rgba(56,189,248,0.45)] transition hover:brightness-110"
               >
-                Enter the Experience
+                Enter the Neon Experience
               </Link>
-              <Link
-                href={`/rewardcircle/demo`}
-                className="rounded-xl border border-cyan-400/60 bg-slate-950/80 px-5 py-2.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400 hover:text-slate-950"
-              >
-                Can You Show Me?
-              </Link>
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined" && window.history.length > 1) {
+                  window.history.back();
+                } else {
+                  window.location.href = "/"; // or "/neonhq" or `/orgs/neon-lunchbox/loyalty`
+                }
+              }}
+              className="rounded-xl border border-cyan-400/60 bg-slate-950/80 px-5 py-2.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400 hover:text-slate-950"
+            >
+              Back To NeonHQ
+            </button>
               {/* optional 3rd button; delete if you only want 2 */}
               {/* <Link
                 href={`/orgs/${DEFAULT_ORG}/loyalty`}
