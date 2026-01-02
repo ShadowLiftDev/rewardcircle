@@ -1,138 +1,144 @@
-import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
-import { requireUser, requireRole } from "@/lib/auth-server";
-import { getLockedOrgId } from "@/lib/org-server";   // 🔥 enforce single-org mode
+"use client";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import type { ProgramSettings } from "@/lib/types";
+import { getOrgId } from "@/lib/org";
 
-type ProgramSettings = {
-  pointsPerDollar: number;
-  tierThresholds: {
-    tier1: number;
-    tier2: number;
-    tier3: number;
-    tier4?: number;
-  };
-  tierNames?: {
-    tier1?: string;
-    tier2?: string;
-    tier3?: string;
-    tier4?: string;
-  };
-  streakConfig: {
-    enabled: boolean;
-    windowDays: number;
-    bonusPoints: number;
-    minVisitsForBonus: number;
+import {
+  fetchProgramSettingsForOrg,
+  saveProgramSettingsForOrg,
+} from "@/lib/loyalty-admin";
+
+import { LoyaltySettingsForm } from "@/components/loyalty/LoyaltySettingsForm";
+
+type PageProps = {
+  params: {
+    orgId: string;
   };
 };
 
-function withDefaults(raw: any): ProgramSettings {
-  const ps = raw || {};
-  const th = ps.tierThresholds || {};
-  const tn = ps.tierNames || {};
-  const sc = ps.streakConfig || {};
+export default function LoyaltyAdminSettingsPage({ params }: PageProps) {
+  // Prefer env-locked orgId (neon-lunchbox), fall back to URL param if needed
+  const envOrgId = getOrgId();
+  const orgId = envOrgId ?? params.orgId;
 
-  return {
-    pointsPerDollar:
-      typeof ps.pointsPerDollar === "number" ? ps.pointsPerDollar : 1,
+  const router = useRouter();
 
-    tierThresholds: {
-      tier1: typeof th.tier1 === "number" ? th.tier1 : 0,
-      tier2: typeof th.tier2 === "number" ? th.tier2 : 500,
-      tier3: typeof th.tier3 === "number" ? th.tier3 : 1000,
-      ...(typeof th.tier4 === "number" ? { tier4: th.tier4 } : {}),
-    },
+  const [loading, setLoading] = useState(true);
+  const [initialSettings, setInitialSettings] =
+    useState<ProgramSettings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-    tierNames: {
-      tier1: tn.tier1,
-      tier2: tn.tier2,
-      tier3: tn.tier3,
-      tier4: tn.tier4,
-    },
+  useEffect(() => {
+    let alive = true;
 
-    streakConfig: {
-      enabled: sc.enabled ?? true,
-      windowDays: sc.windowDays ?? 2,
-      bonusPoints: sc.bonusPoints ?? 50,
-      minVisitsForBonus: sc.minVisitsForBonus ?? 3,
-    },
-  };
-}
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        setSuccess(null);
 
-// ============================================================
-// 🔹 GET – load program settings (owner only)
-// ============================================================
-export async function GET(req: NextRequest) {
-  try {
-    // 🔥 override param-based org
-    const orgId = getLockedOrgId();
+        const settings = await fetchProgramSettingsForOrg(orgId);
+        if (!alive) return;
 
-    const user = await requireUser(req);
-    await requireRole(orgId, user.uid, ["owner"], req);
-
-    const orgRef = adminDb.doc(`orgs/${orgId}`);
-    const snap = await orgRef.get();
-
-    const rawSettings = snap.exists ? (snap.data() as any).programSettings : {};
-    const program = withDefaults(rawSettings);
-
-    return NextResponse.json(
-      { program },
-      {
-        status: 200,
-        headers: {
-          "content-type": "application/json",
-          "cache-control": "no-store",
-        },
+        console.log("[LoyaltyAdminSettings] loaded settings:", settings);
+        setInitialSettings(settings);
+      } catch (e: any) {
+        console.error("[LoyaltyAdminSettings] load error:", e);
+        if (!alive) return;
+        setError(e?.message || "Failed to load program settings.");
+        setInitialSettings(null);
+      } finally {
+        if (!alive) return;
+        setLoading(false);
       }
-    );
-  } catch (e: any) {
-    console.error("[loyalty:admin:settings:GET] error:", e);
-    const msg = e?.message || "Failed to load program settings.";
-    const status = msg === "Forbidden" ? 403 : 500;
+    })();
 
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
-
-// ============================================================
-// 🔹 POST – save program settings (owner only)
-// ============================================================
-export async function POST(req: NextRequest) {
-  try {
-    // 🔥 override URL orgId
-    const orgId = getLockedOrgId();
-
-    const user = await requireUser(req);
-    await requireRole(orgId, user.uid, ["owner"], req);
-
-    const body = (await req.json().catch(() => ({}))) as {
-      programSettings?: any;
+    return () => {
+      alive = false;
     };
+  }, [orgId]);
 
-    const program = withDefaults(body.programSettings ?? body);
+  async function handleSave(settings: ProgramSettings) {
+    try {
+      setSaving(true);
+      setError(null);
+      setSuccess(null);
 
-    const orgRef = adminDb.doc(`orgs/${orgId}`);
-    await orgRef.set({ programSettings: program }, { merge: true });
-
-    return NextResponse.json(
-      { ok: true, program },
-      {
-        status: 200,
-        headers: {
-          "content-type": "application/json",
-          "cache-control": "no-store",
-        },
-      }
-    );
-  } catch (e: any) {
-    console.error("[loyalty:admin:settings:POST] error:", e);
-    const msg = e?.message || "Failed to save program settings.";
-    const status = msg === "Forbidden" ? 403 : 500;
-
-    return NextResponse.json({ error: msg }, { status });
+      await saveProgramSettingsForOrg(orgId, settings);
+      setSuccess("Program settings saved.");
+      setInitialSettings(settings);
+    } catch (e: any) {
+      console.error("[LoyaltyAdminSettings] save error:", e);
+      setError(e?.message || "Failed to save program settings.");
+    } finally {
+      setSaving(false);
+    }
   }
+
+  const header = (
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <p className="text-[11px] uppercase tracking-[0.25em] text-emerald-400/80">
+          NeonHQ · RewardCircle
+        </p>
+        <h1 className="text-2xl font-semibold text-slate-50">
+          Program Settings
+        </h1>
+        <p className="text-sm text-slate-400">
+          Control how points, tiers, and streak bonuses work.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => router.push(`/orgs/${orgId}/loyalty/admin`)}
+        className="rounded-md border border-slate-600 px-3 py-1.5 text-xs hover:bg-white hover:text-black"
+      >
+        Back to Dashboard
+      </button>
+    </div>
+  );
+
+  // 1) Loading state
+  if (loading && !initialSettings && !error) {
+    return (
+      <section className="space-y-6">
+        {header}
+        <p className="text-sm text-slate-400">Loading program settings…</p>
+      </section>
+    );
+  }
+
+  // 2) Error state with no settings loaded
+  if (error && !initialSettings) {
+    return (
+      <section className="space-y-6">
+        {header}
+        <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+          {error}
+        </div>
+      </section>
+    );
+  }
+
+  // 3) Normal state – we have settings
+  return (
+    <section className="space-y-6">
+      {header}
+
+      {initialSettings && (
+        <LoyaltySettingsForm
+          initialSettings={initialSettings}
+          saving={saving}
+          error={error}
+          success={success}
+          onSubmit={handleSave}
+        />
+      )}
+    </section>
+  );
 }
