@@ -1,65 +1,317 @@
-import Image from "next/image";
+import Link from "next/link";
 
-export default function Home() {
+export default function RewardCircleLanding() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <main className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-50">
+      {/* Neon background glows */}
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute -top-40 left-[-10%] h-80 w-80 rounded-full bg-cyan-500/20 blur-3xl" />
+        <div className="absolute top-20 right-[-10%] h-72 w-72 rounded-full bg-purple-500/20 blur-3xl" />
+        <div className="absolute bottom-[-20%] left-1/2 h-80 w-[36rem] -translate-x-1/2 rounded-[999px] bg-gradient-to-r from-cyan-500/10 via-sky-400/5 to-purple-500/10 blur-3xl" />
+      </div>
+
+      <div className="mx-auto max-w-6xl px-4 py-10 space-y-12">
+        {/* Header / nav */}
+        <header className="flex items-center justify-between gap-4 rounded-2xl border border-slate-800/60 bg-slate-950/60 px-4 py-3 shadow-[0_0_40px_rgba(12,148,136,0.15)] backdrop-blur">
+          <div className="flex items-center gap-3">
+            <div className="relative h-9 w-9">
+              <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-cyan-400 via-emerald-400 to-indigo-500 blur-[3px]" />
+              <div className="relative h-full w-full rounded-full bg-slate-950/80 ring-2 ring-cyan-400/60 flex items-center justify-center text-[10px] font-semibold tracking-wide">
+                RC
+              </div>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold tracking-[0.14em] uppercase text-slate-50">
+                RewardCircle
+              </span>
+              <span className="text-[11px] text-slate-400">
+                Neon-smooth loyalty for real-world teams.
+              </span>
+            </div>
+          </div>
+
+          <nav className="flex items-center gap-4 text-[11px] sm:text-xs text-slate-300">
+            <a href="#how-it-works" className="hover:text-white">
+              How it works
+            </a>
+            <a href="#benefits" className="hover:text-white">
+              Benefits
+            </a>
+            <a href="#examples" className="hidden sm:inline hover:text-white">
+              Examples
+            </a>
+            <Link
+              href="/login"
+              className="rounded-full border border-cyan-400/80 bg-slate-900/60 px-3 py-1.5 text-xs font-semibold text-cyan-100 shadow-[0_0_25px_rgba(34,211,238,0.35)] transition hover:bg-cyan-400 hover:text-slate-950"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+              Staff Login
+            </Link>
+          </nav>
+        </header>
+
+        {/* Hero */}
+        <section className="grid items-center gap-10 md:grid-cols-[1.3fr_minmax(0,1fr)]">
+          <div className="space-y-6">
+            <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-cyan-300/80">
+              NeonHQ · Loyalty Engine
+            </p>
+
+            <h1 className="text-4xl sm:text-5xl font-semibold leading-tight sm:leading-[1.05]">
+              Turn everyday guests into{" "}
+              <span className="bg-gradient-to-r from-cyan-300 via-emerald-300 to-purple-400 bg-clip-text text-transparent">
+                neon-level regulars.
+              </span>
+            </h1>
+
+            <p className="max-w-xl text-sm sm:text-base text-slate-300/90">
+              RewardCircle gives you a points-based loyalty system that{" "}
+              <span className="font-semibold text-cyan-200">
+                staff can run in seconds
+              </span>{" "}
+              and{" "}
+              <span className="font-semibold text-purple-200">
+                customers actually understand
+              </span>
+              . One clean dashboard, no plastic cards, no clunky apps.
+            </p>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href="/rewardcircle/demo"
+                className="rounded-xl bg-gradient-to-r from-cyan-400 via-sky-400 to-purple-400 px-5 py-2.5 text-sm font-semibold text-slate-950 shadow-[0_0_40px_rgba(56,189,248,0.45)] transition hover:brightness-110"
+              >
+                Open Guided Demo
+              </Link>
+              <a
+                href="#how-it-works"
+                className="text-sm text-slate-300 hover:text-white"
+              >
+                See how it works →
+              </a>
+            </div>
+
+            {/* Tiny stat strip */}
+            <div className="flex flex-wrap gap-4 text-[11px] text-slate-400">
+              <div className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span>
+                  Designed for bars, cafes, salons, and neighborhood spots.
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                <span>No apps to install · runs on any tablet or laptop.</span>
+              </div>
+            </div>
+          </div>
+
+          {/* “Holographic” screenshot card */}
+          <div className="relative">
+            <div className="pointer-events-none absolute -inset-6 -z-10 rounded-[2rem] bg-[conic-gradient(from_140deg,rgba(34,211,238,0.1),rgba(168,85,247,0.18),rgba(16,185,129,0.12),rgba(34,211,238,0.1))] opacity-80 blur-2xl" />
+            <div className="rounded-3xl border border-slate-700/80 bg-slate-900/80 p-4 shadow-[0_25px_80px_rgba(15,23,42,0.9)] backdrop-blur">
+              <div className="mb-2 flex items-center justify-between text-[11px] text-slate-400">
+                <span>Customer view · Live wallet</span>
+                <span className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
+                  3-day streak
+                </span>
+              </div>
+
+              <div className="rounded-2xl border border-slate-700/80 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-50">
+                      Hi, Taylor
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      1,250 lifetime pts · Member since 2024
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] uppercase tracking-wide text-slate-400">
+                      Current Tier
+                    </div>
+                    <div className="text-lg font-bold text-cyan-300">
+                      Neon Regular
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1 text-[11px] text-slate-400">
+                    Progress to next tier
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                    <div className="h-full w-3/4 bg-gradient-to-r from-cyan-400 via-emerald-400 to-purple-400" />
+                  </div>
+                  <div className="mt-1 flex justify-between text-[10px] text-slate-500">
+                    <span>1,000 pts</span>
+                    <span>2,000 pts → VIP</span>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-slate-700/80 bg-slate-950/80 p-3">
+                    <div className="text-[11px] text-slate-400">
+                      Points available
+                    </div>
+                    <div className="text-2xl font-bold text-slate-50">
+                      420 pts
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-400">
+                      Next reward: <span className="font-semibold">Free Dessert</span>{" "}
+                      (500 pts)
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-700/80 bg-slate-950/80 p-3">
+                    <div className="text-[11px] text-slate-400">
+                      Today&apos;s visit
+                    </div>
+                    <div className="mt-1 text-sm text-slate-200">
+                      +130 pts earned
+                    </div>
+                    <div className="mt-1 text-[11px] text-emerald-300/90">
+                      +50 streak bonus applied
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* How it works */}
+        <section id="how-it-works" className="space-y-4">
+          <h2 className="text-2xl font-semibold text-slate-50">
+            How RewardCircle works
+          </h2>
+          <div className="grid gap-4 md:grid-cols-3 text-sm text-slate-300">
+            <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-br from-slate-950/90 via-slate-900/90 to-slate-950/90 p-4 shadow-[0_0_25px_rgba(15,23,42,0.7)]">
+              <div className="text-xs font-semibold text-cyan-300 mb-1">
+                1 · Earn points
+              </div>
+              <p>
+                Staff enter the ticket amount and tap once. RewardCircle applies your
+                rules (e.g. <span className="font-semibold">10 pts per $1</span>) and
+                streak bonuses automatically.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-br from-slate-950/90 via-slate-900/90 to-slate-950/90 p-4 shadow-[0_0_25px_rgba(15,23,42,0.7)]">
+              <div className="text-xs font-semibold text-cyan-300 mb-1">
+                2 · Climb tiers
+              </div>
+              <p>
+                Guests unlock tiers like <em>Regular</em>, <em>VIP</em>, or{" "}
+                <em>Legend</em> as they hit milestones, with a clear progress bar they
+                can see anytime.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-br from-slate-950/90 via-slate-900/90 to-slate-950/90 p-4 shadow-[0_0_25px_rgba(15,23,42,0.7)]">
+              <div className="text-xs font-semibold text-cyan-300 mb-1">
+                3 · Redeem rewards
+              </div>
+              <p>
+                Staff pull up a guest by phone number, pick a reward (free appetizer,
+                dessert, drink), and points are deducted instantly.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Benefits */}
+        <section id="benefits" className="space-y-4">
+          <h2 className="text-2xl font-semibold text-slate-50">
+            Built for small, mighty teams
+          </h2>
+          <div className="grid gap-4 md:grid-cols-3 text-sm text-slate-300">
+            <div className="rounded-2xl border border-slate-800/80 bg-slate-950/80 p-4">
+              <div className="font-semibold mb-1">Fast for staff</div>
+              <p>
+                One screen to add points, one screen to redeem. No plastic cards, QR
+                drama, or extra hardware required.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-800/80 bg-slate-950/80 p-4">
+              <div className="font-semibold mb-1">Clear for customers</div>
+              <p>
+                Guests see points, tier, and “next reward” in one place, so they always
+                know how close they are to something free.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-800/80 bg-slate-950/80 p-4">
+              <div className="font-semibold mb-1">Simple for owners</div>
+              <p>
+                Your admin dashboard shows member count, total points issued, and top
+                customers at a glance — no spreadsheets.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Examples / Use cases by business type */}
+<section id="examples" className="space-y-4">
+  <h2 className="text-2xl font-semibold text-slate-50">
+    Where RewardCircle fits best
+  </h2>
+  <p className="text-sm text-slate-300/90">
+    Any place with regular guests can run a simple, neon-smooth loyalty loop.
+    Here are a few of the most common setups:
+  </p>
+
+  <div className="grid gap-4 md:grid-cols-3 text-sm text-slate-300">
+    {/* Restaurants & Bars */}
+    <div className="rounded-2xl border border-slate-800/80 bg-slate-950/80 p-4">
+      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300 mb-1">
+        Restaurants &amp; Bars
+      </div>
+      <p className="text-xs text-slate-400 mb-2">
+        Reward people who eat, drink, and bring friends.
+      </p>
+      <ul className="space-y-1 list-disc pl-4 text-[13px]">
+        <li>Points for every tab or ticket amount.</li>
+        <li>Bonus points on slow nights or themed events.</li>
+        <li>Free appetizer / dessert after a set number of visits.</li>
+        <li>VIP tier with priority seating or special menus.</li>
+      </ul>
     </div>
+
+    {/* Cafes & Bakeries */}
+    <div className="rounded-2xl border border-slate-800/80 bg-slate-950/80 p-4">
+      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300 mb-1">
+        Cafes &amp; Bakeries
+      </div>
+      <p className="text-xs text-slate-400 mb-2">
+        Turn daily coffee runs into a habit that stays with you.
+      </p>
+      <ul className="space-y-1 list-disc pl-4 text-[13px]">
+        <li>Replace paper punch-cards with a phone-based wallet.</li>
+        <li>Reward “regular order” streaks with bonus points.</li>
+        <li>Free pastry or drink every few visits.</li>
+        <li>Early access to new drinks or seasonal drops for top tiers.</li>
+      </ul>
+    </div>
+
+    {/* Salons, Studios & Services */}
+    <div className="rounded-2xl border border-slate-800/80 bg-slate-950/80 p-4">
+      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-purple-300 mb-1">
+        Salons, Studios &amp; Services
+      </div>
+      <p className="text-xs text-slate-400 mb-2">
+        Keep clients coming back on schedule—and excited to upgrade.
+      </p>
+      <ul className="space-y-1 list-disc pl-4 text-[13px]">
+        <li>Points for every appointment or package purchased.</li>
+        <li>Bonus points for rebooking before they leave.</li>
+        <li>Free add-ons (treatment, gloss, extra time) for higher tiers.</li>
+        <li>Anniversary or birthday rewards to make clients feel seen.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+        <footer className="pt-4 border-t border-slate-800 text-xs text-slate-500 flex justify-between">
+          <span>RewardCircle · part of NeonHQ</span>
+        </footer>
+      </div>
+    </main>
   );
 }
