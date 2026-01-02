@@ -2,9 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { getClientAuth, getClientDb } from "@/lib/firebase-client";
-import { doc, getDoc } from "firebase/firestore";
+
+export const dynamic = "force-dynamic";
 
 const DEFAULT_ORG =
   process.env.NEXT_PUBLIC_DEFAULT_ORG_ID || "neon-lunchbox";
@@ -31,6 +30,14 @@ export default function LoginPage() {
     try {
       setLoading(true);
 
+      // ⬇️ Lazy-load all Firebase client code so it NEVER runs during build/SSR
+      const [{ getClientAuth, getClientDb }, { signInWithEmailAndPassword }, { doc, getDoc }] =
+        await Promise.all([
+          import("@/lib/firebase-client"),
+          import("firebase/auth"),
+          import("firebase/firestore"),
+        ]);
+
       // Firebase login
       const auth = getClientAuth();
       const userCred = await signInWithEmailAndPassword(
@@ -43,17 +50,14 @@ export default function LoginPage() {
       // Fetch role from Firestore
       const db = getClientDb();
       const roleSnap = await getDoc(
-        doc(db, "orgs", DEFAULT_ORG, "roles", uid)
+        doc(db, "orgs", DEFAULT_ORG, "roles", uid),
       );
 
       if (!roleSnap.exists()) {
         throw new Error("You do not have a role assigned.");
       }
 
-      const role = roleSnap.data().role as
-        | "owner"
-        | "staff"
-        | "customer";
+      const role = roleSnap.data().role as "owner" | "staff" | "customer";
 
       // If ?next exists, allow override
       if (next) {
