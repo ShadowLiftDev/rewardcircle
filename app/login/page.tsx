@@ -11,7 +11,7 @@ const DEFAULT_ORG =
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next"); // optional override
+  const next = searchParams.get("next"); // optional override, but owner-only
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,13 +30,16 @@ export default function LoginPage() {
     try {
       setLoading(true);
 
-      // ⬇️ Lazy-load all Firebase client code so it NEVER runs during build/SSR
-      const [{ getClientAuth, getClientDb }, { signInWithEmailAndPassword }, { doc, getDoc }] =
-        await Promise.all([
-          import("@/lib/firebase-client"),
-          import("firebase/auth"),
-          import("firebase/firestore"),
-        ]);
+      // Lazy-load all Firebase client code so nothing runs during build/SSR
+      const [
+        { getClientAuth, getClientDb },
+        { signInWithEmailAndPassword, signOut },
+        { doc, getDoc },
+      ] = await Promise.all([
+        import("@/lib/firebase-client"),
+        import("firebase/auth"),
+        import("firebase/firestore"),
+      ]);
 
       // Firebase login
       const auth = getClientAuth();
@@ -54,35 +57,28 @@ export default function LoginPage() {
       );
 
       if (!roleSnap.exists()) {
-        throw new Error("You do not have a role assigned.");
+        await signOut(auth);
+        throw new Error("Access denied. No role assigned for this account.");
       }
 
       const role = roleSnap.data().role as "owner" | "staff" | "customer";
 
-      // If ?next exists, allow override
+      // OWNER-ONLY GATE
+      if (role !== "owner") {
+        await signOut(auth);
+        throw new Error(
+          "Access denied. This sign-in is for owners only.",
+        );
+      }
+
+      // Optional next override, but only for valid owners
       if (next) {
         router.push(next);
         return;
       }
 
-      // Role-based redirects
-      if (role === "owner") {
-        router.push(`/orgs/${DEFAULT_ORG}/loyalty/admin`);
-        return;
-      }
-
-      if (role === "staff") {
-        router.push(`/orgs/${DEFAULT_ORG}/loyalty/staff/earn`);
-        return;
-      }
-
-      if (role === "customer") {
-        router.push(`/orgs/${DEFAULT_ORG}/loyalty/customer`);
-        return;
-      }
-
-      // Fallback
-      router.push("/");
+      // Default owner dashboard
+      router.push(`/orgs/${DEFAULT_ORG}/loyalty/admin`);
     } catch (error: any) {
       console.error("[login] sign in error:", error);
       setErr(error?.message || "Sign in failed. Check your credentials.");
@@ -96,9 +92,9 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-950/80 p-6 shadow-[0_0_60px_rgba(56,189,248,0.25)]">
         <div className="mb-5 space-y-1 text-center">
           <div className="mx-auto h-10 w-10 rounded-full bg-[radial-gradient(circle_at_30%_30%,#22d3ee,transparent_55%),radial-gradient(circle_at_70%_70%,#6366f1,transparent_55%)]" />
-          <h1 className="text-xl font-semibold">Sign in to NeonHQ</h1>
+          <h1 className="text-xl font-semibold">Owner Sign-In</h1>
           <p className="text-xs text-slate-400">
-            Access RewardCircle staff and admin tools.
+            Sign in to manage RewardCircle settings and reports.
           </p>
         </div>
 
@@ -109,7 +105,7 @@ export default function LoginPage() {
               htmlFor="email"
               className="text-xs font-medium text-slate-300"
             >
-              Email
+              Owner Email
             </label>
             <input
               id="email"
@@ -118,7 +114,7 @@ export default function LoginPage() {
               autoComplete="email"
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-50 outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
-              placeholder="you@business.com"
+              placeholder="owner@business.com"
             />
           </div>
 
@@ -149,12 +145,13 @@ export default function LoginPage() {
             disabled={loading}
             className="mt-2 w-full rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {loading ? "Signing in…" : "Sign in"}
+            {loading ? "Signing in…" : "Sign in as Owner"}
           </button>
         </form>
 
         <p className="mt-4 text-center text-[11px] text-slate-500">
-          Need an account? Ask your NeonHQ admin to invite you as staff.
+          This portal is for owners only. Staff and customers access
+          RewardCircle at the venue.
         </p>
       </div>
     </main>
