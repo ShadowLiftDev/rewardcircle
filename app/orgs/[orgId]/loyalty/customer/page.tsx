@@ -27,6 +27,45 @@ type LoadedCustomer = {
   streakCount: number;
 };
 
+const ACCENTS = [
+  {
+    key: "cyan",
+    ring: "ring-cyan-400/40",
+    glow: "hover:shadow-[0_0_0_1px_rgba(34,211,238,0.25),0_0_28px_rgba(34,211,238,0.18)]",
+    strip: "from-cyan-400/80 via-cyan-400/20 to-transparent",
+    trim: "from-cyan-400/70 via-purple-400/40 to-transparent",
+    badge: "border-cyan-400/30 bg-cyan-500/10 text-cyan-200",
+  },
+  {
+    key: "purple",
+    ring: "ring-purple-400/40",
+    glow: "hover:shadow-[0_0_0_1px_rgba(167,139,250,0.22),0_0_28px_rgba(167,139,250,0.18)]",
+    strip: "from-purple-400/80 via-purple-400/20 to-transparent",
+    trim: "from-purple-400/70 via-cyan-400/40 to-transparent",
+    badge: "border-purple-400/30 bg-purple-500/10 text-purple-200",
+  },
+  {
+    key: "emerald",
+    ring: "ring-emerald-400/40",
+    glow: "hover:shadow-[0_0_0_1px_rgba(52,211,153,0.22),0_0_28px_rgba(52,211,153,0.16)]",
+    strip: "from-emerald-400/80 via-emerald-400/20 to-transparent",
+    trim: "from-emerald-400/70 via-cyan-400/40 to-transparent",
+    badge: "border-emerald-400/30 bg-emerald-500/10 text-emerald-200",
+  },
+  {
+    key: "amber",
+    ring: "ring-amber-400/40",
+    glow: "hover:shadow-[0_0_0_1px_rgba(251,191,36,0.20),0_0_28px_rgba(251,191,36,0.14)]",
+    strip: "from-amber-400/80 via-amber-400/20 to-transparent",
+    trim: "from-amber-400/70 via-purple-400/35 to-transparent",
+    badge: "border-amber-400/30 bg-amber-500/10 text-amber-200",
+  },
+] as const;
+
+function accentForIndex(i: number) {
+  return ACCENTS[i % ACCENTS.length];
+}
+
 export default function CustomerWalletPage() {
   const { orgId } = useParams<{ orgId: string }>();
   const searchParams = useSearchParams();
@@ -218,65 +257,125 @@ export default function CustomerWalletPage() {
       </NeonCard>
 
       {/* ---------- CUSTOMER SUMMARY ---------- */}
-      {customer && (
-        <NeonCard>
-          <div className="flex flex-wrap justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold">Hi, {customer.name}</h2>
-              <p className="text-sm text-slate-300/80">
-                {customer.lifetimePoints} lifetime points ·{" "}
-                {customer.streakCount}-day streak
-              </p>
-            </div>
+{customer && (
+  <div className="relative overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/70 p-5 ring-1 ring-cyan-400/20">
+    {/* neon trim */}
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent"
+    />
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 opacity-60 [background-image:radial-gradient(circle_at_top,_rgba(34,211,238,0.18)_0,_transparent_55%),radial-gradient(circle_at_bottom,_rgba(167,139,250,0.14)_0,_transparent_55%)]"
+    />
 
-            <div className="text-right">
-              <div className="text-xs uppercase text-slate-400">
-                Current Tier
-              </div>
-              <div className="text-2xl font-bold text-cyan-300">
+    {/* reflective sweep */}
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute -inset-y-10 -left-1/3 w-1/2 rotate-12 bg-gradient-to-r from-transparent via-white/10 to-transparent blur-sm"
+      style={{
+        animation: "walletSweep 5.5s ease-in-out infinite",
+      }}
+    />
+
+    {/* content */}
+    <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700/70 bg-slate-900/60 text-sm font-bold text-cyan-200">
+            RC
+          </span>
+
+          <div className="min-w-0">
+            <h2 className="truncate text-xl font-semibold tracking-tight">
+              {customer.name}
+            </h2>
+            <div className="mt-1 flex flex-wrap gap-2 text-xs">
+              <span className="rounded-full border border-slate-700 bg-slate-900/60 px-2 py-0.5 text-slate-200/90">
+                {customer.lifetimePoints} lifetime pts
+              </span>
+              <span className="rounded-full border border-slate-700 bg-slate-900/60 px-2 py-0.5 text-slate-200/90">
+                {customer.streakCount}-day streak
+              </span>
+              <span className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-cyan-200">
                 {tierInfo.currentTierLabel}
-              </div>
+              </span>
             </div>
           </div>
+        </div>
+      </div>
 
-          {/* Progress bar */}
-          <div className="mt-4">
-            <div className="h-3 w-full overflow-hidden rounded-full bg-slate-800">
-              <div
-                className="h-full bg-gradient-to-r from-cyan-400 via-emerald-400 to-purple-400"
-                style={{ width: `${progressPercent}%` }}
-              />
+      {/* points balance */}
+      <div className="w-full max-w-sm rounded-2xl border border-cyan-400/25 bg-slate-950/60 p-4 ring-1 ring-white/5">
+        <div className="flex items-end justify-between">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+              Points Available
             </div>
-
-            <div className="mt-2 flex justify-between text-xs text-slate-400">
-              <span>{tierInfo.currentThreshold} pts</span>
-              <span>
-                {tierInfo.nextTierLabel
-                  ? `${tierInfo.nextThreshold} → ${tierInfo.nextTierLabel}`
-                  : "Max tier reached"}
+            <div className="mt-1 text-4xl font-extrabold leading-none">
+              <span className="bg-gradient-to-r from-cyan-200 via-emerald-200 to-purple-200 bg-clip-text text-transparent">
+                {customer.pointsBalance}
               </span>
             </div>
           </div>
 
-          {/* Balance box */}
-          <div className="mt-4 rounded-xl border border-cyan-400/40 bg-slate-950/70 p-3">
-            <div className="text-xs uppercase text-slate-400">
-              Points Available
-            </div>
-            <div className="text-3xl font-extrabold">
-              {customer.pointsBalance}
-            </div>
-
-            {nextReward && (
-              <p className="mt-1 text-xs text-slate-300/80">
-                Next reward:{" "}
-                <span className="font-semibold">{nextReward.name}</span> (
-                {nextReward.pointsCost} pts)
-              </p>
-            )}
+          <div className="h-9 w-9 rounded-xl border border-slate-700/70 bg-slate-900/60 p-2">
+            <div className="h-full w-full rounded-md bg-gradient-to-br from-slate-200/10 to-transparent" />
           </div>
-        </NeonCard>
-      )}
+        </div>
+
+        {nextReward && (
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-slate-800/70 bg-slate-900/30 px-3 py-2 text-xs">
+            <span className="text-slate-300/90">Next reward</span>
+            <span className="truncate font-semibold text-slate-100">
+              {nextReward.name} · {nextReward.pointsCost} pts
+            </span>
+          </div>
+        )}
+
+        {/* progress */}
+        <div className="mt-4">
+          <div className="flex items-center justify-between text-[11px] text-slate-400">
+            <span>{tierInfo.currentThreshold} pts</span>
+            <span>
+              {tierInfo.nextTierLabel
+                ? `${tierInfo.nextThreshold} → ${tierInfo.nextTierLabel}`
+                : "Max tier reached"}
+            </span>
+          </div>
+
+          <div className="mt-2 h-3 w-full overflow-hidden rounded-full bg-slate-800">
+            <div
+              className="h-full bg-gradient-to-r from-cyan-400 via-emerald-400 to-purple-400"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* keyframes (scoped via global style tag) */}
+    <style jsx global>{`
+      @keyframes walletSweep {
+        0% {
+          transform: translateX(-20%) rotate(12deg);
+          opacity: 0;
+        }
+        20% {
+          opacity: 0.55;
+        }
+        50% {
+          transform: translateX(180%) rotate(12deg);
+          opacity: 0.3;
+        }
+        70%,
+        100% {
+          opacity: 0;
+        }
+      }
+    `}</style>
+  </div>
+)}
 
       {/* ---------- REWARD STORE ---------- */}
       <NeonCard>
@@ -299,41 +398,91 @@ export default function CustomerWalletPage() {
 
         {customer && rewards.length > 0 && (
           <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {rewards.map((reward) => {
-              const canAfford = customer.pointsBalance >= reward.pointsCost;
+            {rewards.map((reward, i) => {
+  const canAfford = customer.pointsBalance >= reward.pointsCost;
+  const accent = accentForIndex(i);
 
-              return (
-                <li
-                  key={reward.id}
-                  className="rounded-xl border border-slate-700/70 bg-slate-950/80 p-4"
-                >
-                  <div className="font-semibold text-slate-50">
-                    {reward.name}
-                  </div>
-                  {reward.description && (
-                    <p className="mt-1 text-xs text-slate-400">
-                      {reward.description}
-                    </p>
-                  )}
+  return (
+    <li
+      key={reward.id}
+      className={[
+        "group relative overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/80 p-4",
+        "transition-all duration-200 hover:-translate-y-0.5",
+        "ring-1 ring-white/5",
+        accent.glow,
+      ].join(" ")}
+    >
+      {/* left neon strip */}
+      <div
+        aria-hidden="true"
+        className={[
+          "pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b",
+          accent.strip,
+        ].join(" ")}
+      />
 
-                  <div className="mt-3 flex justify-between text-sm">
-                    <div className="text-slate-200">
-                      Cost: <b>{reward.pointsCost} pts</b>
-                    </div>
+      {/* top neon trim */}
+      <div
+        aria-hidden="true"
+        className={[
+          "pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r",
+          accent.trim,
+        ].join(" ")}
+      />
 
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[11px] ${
-                        canAfford
-                          ? "border border-emerald-500/40 bg-emerald-500/20 text-emerald-200"
-                          : "border border-slate-700 bg-slate-800 text-slate-400"
-                      }`}
-                    >
-                      {canAfford ? "You can redeem" : "Keep earning"}
-                    </span>
-                  </div>
-                </li>
-              );
-            })}
+      {/* subtle interior glow */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -inset-10 opacity-0 blur-2xl transition-opacity duration-200 group-hover:opacity-100"
+        style={{
+          background:
+            "radial-gradient(circle at 30% 20%, rgba(34,211,238,0.12), transparent 55%), radial-gradient(circle at 70% 80%, rgba(167,139,250,0.10), transparent 60%)",
+        }}
+      />
+
+      <div className="relative">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-base font-semibold text-slate-50">
+              {reward.name}
+            </div>
+            {reward.description && (
+              <p className="mt-1 line-clamp-2 text-xs text-slate-400">
+                {reward.description}
+              </p>
+            )}
+          </div>
+
+          <span
+            className={[
+              "shrink-0 rounded-full border px-2 py-0.5 text-[11px]",
+              canAfford
+                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200"
+                : "border-slate-700 bg-slate-900/60 text-slate-400",
+            ].join(" ")}
+          >
+            {canAfford ? "Redeemable" : "Keep earning"}
+          </span>
+        </div>
+
+        <div className="mt-4 flex items-end justify-between">
+          <div className="text-sm text-slate-200">
+            Cost: <b>{reward.pointsCost} pts</b>
+          </div>
+
+          <span
+            className={[
+              "rounded-full border px-2 py-0.5 text-[11px]",
+              accent.badge,
+            ].join(" ")}
+          >
+            Neon Store
+          </span>
+        </div>
+      </div>
+    </li>
+  );
+})}
           </ul>
         )}
       </NeonCard>
