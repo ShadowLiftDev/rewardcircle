@@ -11,20 +11,40 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { getClientDb } from "./firebase-client";
-import { Customer, ProgramSettings } from "./types";
+import type { Customer, ProgramSettings } from "./types";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
+/**
+ * Decide which tier id a customer belongs to given their lifetime points
+ * and a map of tier thresholds (e.g. { starter: 250, intermediate: 1000, ... }).
+ */
 function calculateTier(
   lifetimePoints: number,
   thresholds: ProgramSettings["tierThresholds"],
-): "tier1" | "tier2" | "tier3" | "tier4" {
-  if (thresholds.tier4 && lifetimePoints >= thresholds.tier4) return "tier4";
-  if (lifetimePoints >= thresholds.tier3) return "tier3";
-  if (lifetimePoints >= thresholds.tier2) return "tier2";
-  return "tier1";
+): string {
+  const entries = Object.entries(thresholds)
+    .filter(([, v]) => typeof v === "number" && Number.isFinite(v))
+    .sort(([, a], [, b]) => a - b); // ascending by requiredPoints
+
+  if (!entries.length) {
+    return "tier1"; // fallback id if somehow misconfigured
+  }
+
+  // Start at the lowest tier and move up while lifetimePoints >= threshold
+  let currentId = entries[0][0];
+
+  for (const [id, min] of entries) {
+    if (lifetimePoints >= min) {
+      currentId = id;
+    } else {
+      break;
+    }
+  }
+
+  return currentId;
 }
 
 function updateStreak(
@@ -70,15 +90,21 @@ function updateStreak(
  * ------------------------------------------------------------------*/
 
 function getDefaultProgramSettings(): ProgramSettings {
+  // Align this with your Firestore loyaltyPrograms/default doc
   return {
-    pointsPerDollar: 1,
+    pointsPerDollar: 2,
     tierThresholds: {
-      tier1: 0,
-      tier2: 500,
-      tier3: 1000,
-      tier4: 2000,
+      starter: 250,
+      intermediate: 1000,
+      expert: 2500,
+      vip: 5000,
     },
-    tierNames: {},
+    tierNames: {
+      starter: "Starter",
+      intermediate: "Intermediate",
+      expert: "Expert",
+      vip: "VIP",
+    },
     streakConfig: {
       enabled: true,
       windowDays: 2,
@@ -91,32 +117,73 @@ function getDefaultProgramSettings(): ProgramSettings {
 export async function getOrgProgramSettings(
   orgId: string,
 ): Promise<ProgramSettings> {
-  const orgSnap = await getDoc(doc(getClientDb(), "orgs", orgId));
-  if (!orgSnap.exists()) {
+  const snap = await getDoc(doc(getClientDb(), "orgs", orgId));
+  if (!snap.exists()) {
     return getDefaultProgramSettings();
   }
 
-  const data = orgSnap.data() as any;
-  const ps = (data.programSettings || {}) as Partial<ProgramSettings>;
+  const data = snap.data() as any;
+  const raw = (data.programSettings || {}) as Partial<ProgramSettings>;
 
-  return {
-    pointsPerDollar: ps.pointsPerDollar ?? 1,
-    tierThresholds: {
-      tier1: ps.tierThresholds?.tier1 ?? 0,
-      tier2: ps.tierThresholds?.tier2 ?? 500,
-      tier3: ps.tierThresholds?.tier3 ?? 1000,
-      ...(ps.tierThresholds?.tier4 != null
-        ? { tier4: ps.tierThresholds.tier4 }
-        : {}),
-    },
-    tierNames: ps.tierNames ?? {},
-    streakConfig: {
-      enabled: ps.streakConfig?.enabled ?? true,
-      windowDays: ps.streakConfig?.windowDays ?? 2,
-      bonusPoints: ps.streakConfig?.bonusPoints ?? 50,
-      minVisitsForBonus: ps.streakConfig?.minVisitsForBonus ?? 3,
-    },
-  };
+  const base = getDefaultProgramSettings();
+
+  // Normalize tier thresholds into Record<string, number>
+  const rawThresholds = (raw.tierThresholds || {}) as Record<string, any>;
+  const tierThresholds: Record<string, number> = {};
+
+  for (const [id, v] of Object.entries(rawThresholds)) {
+    const n = Number(v);
+    if (Number.isFinite(n)) {
+      tierThresholds[id] = n;
+    }
+  }
+
+  const rawNames = (raw.tierNames || {}) as Record<string, any>;
+  const tierNames: Record<string, string> = {};
+
+  for (const [id, v] of Object.entries(rawNames)) {
+    const name = String(v ?? "").trim();
+    if (name) {
+      tierNames[id] = name;
+    }
+  }
+
+const sc = (raw.streakConfig ??
+  {}) as Partial<ProgramSettings["streakConfig"]>;
+
+return {
+  pointsPerDollar:
+    typeof raw.pointsPerDollar === "number"
+      ? raw.pointsPerDollar
+      : base.pointsPerDollar,
+
+  tierThresholds:
+    Object.keys(tierThresholds).length > 0
+      ? tierThresholds
+      : base.tierThresholds,
+
+  tierNames:
+    Object.keys(tierNames).length > 0 ? tierNames : base.tierNames,
+
+  streakConfig: {
+    enabled:
+      typeof sc.enabled === "boolean"
+        ? sc.enabled
+        : base.streakConfig.enabled,
+    windowDays:
+      typeof sc.windowDays === "number"
+        ? sc.windowDays
+        : base.streakConfig.windowDays,
+    bonusPoints:
+      typeof sc.bonusPoints === "number"
+        ? sc.bonusPoints
+        : base.streakConfig.bonusPoints,
+    minVisitsForBonus:
+      typeof sc.minVisitsForBonus === "number"
+        ? sc.minVisitsForBonus
+        : base.streakConfig.minVisitsForBonus,
+  },
+};
 }
 
 export function getTierLabel(
@@ -128,17 +195,19 @@ export function getTierLabel(
     return customName;
   }
 
-  switch (tierKey) {
-    case "tier2":
-      return "Tier 2";
-    case "tier3":
-      return "Tier 3";
-    case "tier4":
-      return "Tier 4";
-    case "tier1":
-    default:
-      return "Tier 1";
+  // Fallbacks for old style "tier1/tier2/..." ids
+  if (/^tier(\d+)$/i.test(tierKey)) {
+    const m = tierKey.match(/^tier(\d+)$/i);
+    const num = m?.[1] ?? "1";
+    return `Tier ${num}`;
   }
+
+  // Generic fallback: capitalize the id (starter → Starter)
+  if (tierKey && typeof tierKey === "string") {
+    return tierKey.charAt(0).toUpperCase() + tierKey.slice(1);
+  }
+
+  return "Tier 1";
 }
 
 // Read-only lookup (no create)
@@ -146,7 +215,12 @@ export async function getCustomerByPhone(
   orgId: string,
   phone: string,
 ): Promise<Customer | null> {
-  const customersRef = collection(getClientDb(), "orgs", orgId, "loyaltyCustomers");
+  const customersRef = collection(
+    getClientDb(),
+    "orgs",
+    orgId,
+    "loyaltyCustomers",
+  );
   const q = query(customersRef, where("phone", "==", phone));
   const snap = await getDocs(q);
 
@@ -163,7 +237,7 @@ export async function getCustomerByPhone(
     joinedAt: d.joinedAt?.toDate?.().toISOString?.() ?? "",
     pointsBalance: d.pointsBalance ?? 0,
     lifetimePoints: d.lifetimePoints ?? 0,
-    currentTier: d.currentTier ?? "tier1",
+    currentTier: d.currentTier ?? "starter", // or some default id
     streakCount: d.streakCount ?? 0,
     lastVisitDate:
       typeof d.lastVisitDate === "string" ? d.lastVisitDate : undefined,
@@ -206,7 +280,12 @@ export async function findOrCreateCustomerByPhone(
   phone: string,
   name?: string,
 ): Promise<Customer> {
-  const customersRef = collection(getClientDb(), "orgs", orgId, "loyaltyCustomers");
+  const customersRef = collection(
+    getClientDb(),
+    "orgs",
+    orgId,
+    "loyaltyCustomers",
+  );
   const q = query(customersRef, where("phone", "==", phone));
   const snap = await getDocs(q);
 
@@ -221,7 +300,7 @@ export async function findOrCreateCustomerByPhone(
       joinedAt: d.joinedAt?.toDate?.().toISOString?.() ?? "",
       pointsBalance: d.pointsBalance ?? 0,
       lifetimePoints: d.lifetimePoints ?? 0,
-      currentTier: d.currentTier ?? "tier1",
+      currentTier: d.currentTier ?? "starter",
       streakCount: d.streakCount ?? 0,
       lastVisitDate:
         typeof d.lastVisitDate === "string" ? d.lastVisitDate : undefined,
@@ -239,7 +318,7 @@ export async function findOrCreateCustomerByPhone(
     joinedAt: now,
     pointsBalance: 0,
     lifetimePoints: 0,
-    currentTier: "tier1",
+    currentTier: "starter", // lowest tier id
     streakCount: 0,
     lastVisitDate: null,
     lastActivityAt: now,
@@ -254,7 +333,7 @@ export async function findOrCreateCustomerByPhone(
     joinedAt: nowIso,
     pointsBalance: 0,
     lifetimePoints: 0,
-    currentTier: "tier1",
+    currentTier: "starter",
     streakCount: 0,
     lastVisitDate: undefined,
     lastActivityAt: nowIso,
@@ -276,7 +355,13 @@ export async function addPointsForPurchase(options: {
     purchaseAmount * (programSettings.pointsPerDollar ?? 1),
   );
 
-  const customerRef = doc(getClientDb(), "orgs", orgId, "loyaltyCustomers", customerId);
+  const customerRef = doc(
+    getClientDb(),
+    "orgs",
+    orgId,
+    "loyaltyCustomers",
+    customerId,
+  );
   const customerSnap = await getDoc(customerRef);
   if (!customerSnap.exists()) {
     throw new Error("Customer not found when adding points.");
@@ -297,7 +382,10 @@ export async function addPointsForPurchase(options: {
   const totalEarned = earnPoints + streakBonus;
   const newLifetime = lifetimePoints + totalEarned;
   const newBalance = currentPoints + totalEarned;
-  const newTier = calculateTier(newLifetime, programSettings.tierThresholds);
+  const newTier = calculateTier(
+    newLifetime,
+    programSettings.tierThresholds,
+  );
 
   // update customer
   await updateDoc(customerRef, {
@@ -310,15 +398,18 @@ export async function addPointsForPurchase(options: {
   });
 
   // log transaction (loyalty-specific)
-  await addDoc(collection(getClientDb(), "orgs", orgId, "loyaltyTransactions"), {
-    customerId,
-    type: "earn",
-    points: totalEarned,
-    purchaseAmount,
-    staffId: staffId ?? null,
-    note: streakBonus > 0 ? "Includes streak bonus" : null,
-    createdAt: serverTimestamp(),
-  });
+  await addDoc(
+    collection(getClientDb(), "orgs", orgId, "loyaltyTransactions"),
+    {
+      customerId,
+      type: "earn",
+      points: totalEarned,
+      purchaseAmount,
+      staffId: staffId ?? null,
+      note: streakBonus > 0 ? "Includes streak bonus" : null,
+      createdAt: serverTimestamp(),
+    },
+  );
 
   return {
     newBalance,
@@ -339,8 +430,20 @@ export async function redeemRewardForCustomer(params: {
   const { orgId, customerId, rewardId, staffId } = params;
 
   // References to customer + reward docs
-  const customerRef = doc(getClientDb(), "orgs", orgId, "loyaltyCustomers", customerId);
-  const rewardRef = doc(getClientDb(), "orgs", orgId, "loyaltyRewards", rewardId); // 🔹 matches admin/staff collection
+  const customerRef = doc(
+    getClientDb(),
+    "orgs",
+    orgId,
+    "loyaltyCustomers",
+    customerId,
+  );
+  const rewardRef = doc(
+    getClientDb(),
+    "orgs",
+    orgId,
+    "loyaltyRewards",
+    rewardId,
+  );
 
   // Load both docs in parallel
   const [customerSnap, rewardSnap] = await Promise.all([
@@ -382,14 +485,17 @@ export async function redeemRewardForCustomer(params: {
   });
 
   // Log redemption in loyaltyTransactions
-  await addDoc(collection(getClientDb(), "orgs", orgId, "loyaltyTransactions"), {
-    customerId,
-    rewardId,
-    type: "redeem",
-    points: -cost, // negative since points are deducted
-    staffId: staffId ?? null,
-    createdAt: serverTimestamp(),
-  });
+  await addDoc(
+    collection(getClientDb(), "orgs", orgId, "loyaltyTransactions"),
+    {
+      customerId,
+      rewardId,
+      type: "redeem",
+      points: -cost, // negative since points are deducted
+      staffId: staffId ?? null,
+      createdAt: serverTimestamp(),
+    },
+  );
 
   return { newBalance };
 }
