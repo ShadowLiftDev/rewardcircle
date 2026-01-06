@@ -38,6 +38,31 @@ function getDefaultProgramSettings(): ProgramSettings {
   };
 }
 
+function digitsOnly(s: string) {
+  return (s ?? "").replace(/\D/g, "");
+}
+
+/**
+ * Normalize common US inputs to E.164:
+ * - "5556667777" -> "+15556667777"
+ * - "(555) 666-7777" -> "+15556667777"
+ * - "+1 (555) 666-7777" -> "+15556667777"
+ * - "15556667777" -> "+15556667777"
+ */
+function normalizePhoneToE164US(raw?: string): string | null {
+  const input = String(raw ?? "").trim();
+  if (!input) return null;
+
+  const d = digitsOnly(input);
+  if (!d) return null;
+
+  // Keep last 10 digits as national number (covers "1XXXXXXXXXX", "XXXXXXXXXX", or longer garbage)
+  const last10 = d.length >= 10 ? d.slice(-10) : "";
+  if (last10.length !== 10) return null;
+
+  return `+1${last10}`;
+}
+
 /**
  * Your real program doc shape (loyaltyPrograms/default)
  * tiers: [{ id, name, requiredPoints, multiplier }]
@@ -116,7 +141,7 @@ export async function POST(req: NextRequest) {
     const rawPhone = String(body.phone ?? "").trim();
     const rawEmail = String(body.email ?? "").trim();
 
-    const phone = rawPhone || undefined;
+    const phone = normalizePhoneToE164US(rawPhone) || undefined;
     const email = rawEmail ? rawEmail.toLowerCase() : undefined;
 
     if (!phone && !email) {
