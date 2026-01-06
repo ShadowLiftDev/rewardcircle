@@ -1,6 +1,8 @@
 import type { ProgramSettings } from "./types";
 
-export type LoyaltyPlanId = "simple" | "standard" | "vip";
+// For now we only really need a single plan that matches the
+// Firestore default "Standard Loyalty Program".
+export type LoyaltyPlanId = "default";
 
 export interface LoyaltyPlanConfig {
   id: LoyaltyPlanId;
@@ -11,127 +13,72 @@ export interface LoyaltyPlanConfig {
 }
 
 /**
- * Default catalog of loyalty templates.
- * You can change names / numbers anytime without breaking types.
+ * Single default plan that mirrors your Firestore
+ * orgs/{orgId}/loyaltyPrograms/default document.
  */
-export const LOYALTY_PLANS: Record<LoyaltyPlanId, LoyaltyPlanConfig> = {
-  simple: {
-    id: "simple",
-    name: "Simple Points",
-    tagline: "1 point per dollar, 3 tiers",
-    description:
-      "Straightforward starter program: 1 point per $1, three tiers, light streak bonus to reward regulars.",
-    settings: {
-      pointsPerDollar: 1,
-      tierThresholds: {
-        tier1: 0,
-        tier2: 300,
-        tier3: 800,
-        tier4: undefined,
-      },
-      tierNames: {
-        tier1: "Regular",
-        tier2: "VIP",
-        tier3: "Super VIP",
-      },
-      streakConfig: {
-        enabled: true,
-        windowDays: 2,
-        bonusPoints: 25,
-        minVisitsForBonus: 3,
-      },
-    },
-  },
+const DEFAULT_PLAN: LoyaltyPlanConfig = {
+  id: "default",
+  name: "Standard Loyalty Program",
+  tagline: "2 points per dollar, 4 tiers",
+  description:
+    "Earn 2 points per $1 spent and climb from Starter to VIP with a visit streak bonus for regulars.",
+  settings: {
+    // matches pointRules.pointsPerDollar in Firestore
+    pointsPerDollar: 2,
 
-  standard: {
-    id: "standard",
-    name: "Standard Loyalty",
-    tagline: "1 point per dollar, 4 tiers",
-    description:
-      "Balanced program with four tiers and a meaningful streak bonus for repeat visits.",
-    settings: {
-      pointsPerDollar: 1,
-      tierThresholds: {
-        tier1: 0,
-        tier2: 500,
-        tier3: 1000,
-        tier4: 2000,
-      },
-      tierNames: {
-        tier1: "Regular",
-        tier2: "VIP",
-        tier3: "Elite",
-        tier4: "Legend",
-      },
-      streakConfig: {
-        enabled: true,
-        windowDays: 2,
-        bonusPoints: 50,
-        minVisitsForBonus: 3,
-      },
+    // dynamic tier map: ids line up with Firestore tiers[].id
+    tierThresholds: {
+      starter: 250,
+      intermediate: 1000,
+      expert: 2500,
+      vip: 5000,
     },
-  },
 
-  vip: {
-    id: "vip",
-    name: "High-Roller",
-    tagline: "2 points per dollar, aggressive tiers",
-    description:
-      "Designed for bigger average tickets: more points per dollar, higher thresholds, and a strong streak reward.",
-    settings: {
-      pointsPerDollar: 2,
-      tierThresholds: {
-        tier1: 0,
-        tier2: 800,
-        tier3: 2000,
-        tier4: 4000,
-      },
-      tierNames: {
-        tier1: "Insider",
-        tier2: "High Roller",
-        tier3: "Ultra VIP",
-        tier4: "Hall of Fame",
-      },
-      streakConfig: {
-        enabled: true,
-        windowDays: 3,
-        bonusPoints: 100,
-        minVisitsForBonus: 4,
-      },
+    // UI names line up with Firestore tiers[].name
+    tierNames: {
+      starter: "Starter",
+      intermediate: "Intermediate",
+      expert: "Expert",
+      vip: "VIP",
+    },
+
+    // You don’t store this in Firestore yet, but it’s harmless default config.
+    streakConfig: {
+      enabled: true,
+      windowDays: 2,
+      bonusPoints: 50,
+      minVisitsForBonus: 3,
     },
   },
 };
 
-export const DEFAULT_LOYALTY_PLAN_ID: LoyaltyPlanId = "standard";
+export const LOYALTY_PLANS: Record<LoyaltyPlanId, LoyaltyPlanConfig> = {
+  default: DEFAULT_PLAN,
+};
+
+export const DEFAULT_LOYALTY_PLAN_ID: LoyaltyPlanId = "default";
 
 /**
- * Safe accessor for a plan config.
+ * Safe accessor (kept so any existing imports don’t break).
  */
 export function getLoyaltyPlan(
   id: LoyaltyPlanId = DEFAULT_LOYALTY_PLAN_ID,
 ): LoyaltyPlanConfig {
-  return LOYALTY_PLANS[id];
+  return LOYALTY_PLANS[id] ?? DEFAULT_PLAN;
 }
 
 /**
- * Convenience helper when you want a fresh copy of the settings object
- * (so you don't accidentally mutate the shared catalog).
+ * Convenience helper: get a fresh copy of ProgramSettings for seeding.
  */
 export function cloneProgramSettingsFromPlan(
   id: LoyaltyPlanId,
 ): ProgramSettings {
   const base = getLoyaltyPlan(id).settings;
 
+  // Deep-ish clone so we never mutate the catalog object by accident
   return {
     pointsPerDollar: base.pointsPerDollar,
-    tierThresholds: {
-      tier1: base.tierThresholds.tier1,
-      tier2: base.tierThresholds.tier2,
-      tier3: base.tierThresholds.tier3,
-      ...(base.tierThresholds.tier4 != null
-        ? { tier4: base.tierThresholds.tier4 }
-        : {}),
-    },
+    tierThresholds: { ...base.tierThresholds },
     tierNames: base.tierNames ? { ...base.tierNames } : undefined,
     streakConfig: {
       enabled: base.streakConfig.enabled,
