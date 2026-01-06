@@ -1,17 +1,27 @@
+// ---- Tier key typing (supports BOTH legacy tier1..tier4 and new dynamic ids) ----
+
+export type LegacyTierKey = "tier1" | "tier2" | "tier3" | "tier4";
+
+/**
+ * "tier1" | "tier2" | ... are still allowed,
+ * but ANY string id (starter/intermediate/vip) is also allowed.
+ */
+export type TierKey = LegacyTierKey | (string & {});
+
+/**
+ * Allows dynamic threshold keys, while still letting old code do:
+ * programSettings.tierThresholds.tier2
+ */
+export type TierThresholds = Record<string, number> & Partial<Record<LegacyTierKey, number>>;
+
+export type TierNames = Record<string, string> & Partial<Record<LegacyTierKey, string>>;
+
+// ---- Program Settings ----
+
 export interface ProgramSettings {
   pointsPerDollar: number;
-  tierThresholds: {
-    tier1: number;
-    tier2: number;
-    tier3: number;
-    tier4?: number;
-  };
-  tierNames?: {
-    tier1?: string;
-    tier2?: string;
-    tier3?: string;
-    tier4?: string;
-  };
+  tierThresholds: TierThresholds;
+  tierNames?: TierNames;
   streakConfig: {
     enabled: boolean;
     windowDays: number;
@@ -19,6 +29,8 @@ export interface ProgramSettings {
     minVisitsForBonus: number;
   };
 }
+
+// ---- Org ----
 
 export interface Org {
   id: string;
@@ -30,6 +42,8 @@ export interface Org {
   programSettings: ProgramSettings;
 }
 
+// ---- Customer ----
+
 export interface Customer {
   id: string;
   name: string;
@@ -38,11 +52,13 @@ export interface Customer {
   joinedAt: string;
   pointsBalance: number;
   lifetimePoints: number;
-  currentTier: "tier1" | "tier2" | "tier3" | "tier4";
+  currentTier: TierKey; // ✅ dynamic ("starter", "vip", etc.)
   streakCount: number;
   lastVisitDate?: string;
   lastActivityAt: string;
 }
+
+// ---- Staff / Transactions unchanged ----
 
 export interface Staff {
   id: string;

@@ -149,8 +149,6 @@ export async function fetchProgramSettingsForOrg(
   const user = auth.currentUser;
 
   const headers: HeadersInit = {};
-
-  // In prod / real login, include Firebase ID token
   if (user) {
     const token = await user.getIdToken();
     headers["authorization"] = `Bearer ${token}`;
@@ -164,10 +162,13 @@ export async function fetchProgramSettingsForOrg(
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data?.error || `Failed to load program settings (${res.status}).`);
+    throw new Error(
+      data?.error || `Failed to load program settings (${res.status}).`,
+    );
   }
 
-  return data.program as ProgramSettings;
+  // ✅ Route returns ProgramSettings directly now
+  return data as ProgramSettings;
 }
 
 export async function saveProgramSettingsForOrg(
@@ -181,7 +182,6 @@ export async function saveProgramSettingsForOrg(
     "content-type": "application/json",
   };
 
-  // In prod / real login, include Firebase ID token
   if (user) {
     const token = await user.getIdToken();
     headers["authorization"] = `Bearer ${token}`;
@@ -190,11 +190,14 @@ export async function saveProgramSettingsForOrg(
   const res = await fetch(`/api/orgs/${orgId}/loyalty/admin/settings`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ programSettings: settings }),
+    // ✅ Route expects ProgramSettings directly now
+    body: JSON.stringify(settings),
   });
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data?.error || `Failed to save program settings (${res.status}).`);
+    throw new Error(
+      data?.error || `Failed to save program settings (${res.status}).`,
+    );
   }
 }

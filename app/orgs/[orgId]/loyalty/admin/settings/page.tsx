@@ -1,144 +1,154 @@
-"use client";
+import { NextRequest, NextResponse } from "next/server";
+import { adminDb } from "@/lib/firebase-admin";
+import { getLockedOrgId } from "@/lib/org-server";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import type { ProgramSettings } from "@/lib/types";
-import { getOrgId } from "@/lib/org";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-import {
-  fetchProgramSettingsForOrg,
-  saveProgramSettingsForOrg,
-} from "@/lib/loyalty-admin";
-
-import { LoyaltySettingsForm } from "@/components/loyalty/LoyaltySettingsForm";
-
-type PageProps = {
-  params: {
-    orgId: string;
+type ProgramSettings = {
+  pointsPerDollar: number;
+  tierThresholds: Record<string, number>;
+  tierNames?: Record<string, string>;
+  streakConfig: {
+    enabled: boolean;
+    windowDays: number;
+    bonusPoints: number;
+    minVisitsForBonus: number;
   };
 };
 
-export default function LoyaltyAdminSettingsPage({ params }: PageProps) {
-  // Prefer env-locked orgId (neon-lunchbox), fall back to URL param if needed
-  const envOrgId = getOrgId();
-  const orgId = envOrgId ?? params.orgId;
+function defaultSettings(): ProgramSettings {
+  return {
+    pointsPerDollar: 1,
+    tierThresholds: { starter: 0, intermediate: 1000, expert: 2500, vip: 5000 },
+    tierNames: { starter: "Starter", intermediate: "Intermediate", expert: "Expert", vip: "VIP" },
+    streakConfig: { enabled: true, windowDays: 2, bonusPoints: 50, minVisitsForBonus: 3 },
+  };
+}
 
-  const router = useRouter();
+function programDocRef(org: string) {
+  return adminDb.doc(`orgs/${org}/loyaltyPrograms/default`);
+}
 
-  const [loading, setLoading] = useState(true);
-  const [initialSettings, setInitialSettings] =
-    useState<ProgramSettings | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+function toSettings(programData: any): ProgramSettings {
+  const base = defaultSettings();
 
-  useEffect(() => {
-    let alive = true;
+  const ppd = Number(programData?.pointRules?.pointsPerDollar ?? base.pointsPerDollar);
 
-    (async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        setSuccess(null);
+  const tierThresholds: Record<string, number> = {};
+  const tierNames: Record<string, string> = {};
 
-        const settings = await fetchProgramSettingsForOrg(orgId);
-        if (!alive) return;
+  const tiers = Array.isArray(programData?.tiers) ? programData.tiers : [];
+  for (const t of tiers) {
+    const id = String(t?.id ?? "").trim();
+    if (!id) continue;
+    tierThresholds[id] = Number(t?.requiredPoints ?? 0);
+    const nm = String(t?.name ?? "").trim();
+    if (nm) tierNames[id] = nm;
+  }
 
-        console.log("[LoyaltyAdminSettings] loaded settings:", settings);
-        setInitialSettings(settings);
-      } catch (e: any) {
-        console.error("[LoyaltyAdminSettings] load error:", e);
-        if (!alive) return;
-        setError(e?.message || "Failed to load program settings.");
-        setInitialSettings(null);
-      } finally {
-        if (!alive) return;
-        setLoading(false);
-      }
-    })();
+  // optional: allow storing streakConfig directly on the program doc
+  const sc = programData?.streakConfig ?? base.streakConfig;
 
-    return () => {
-      alive = false;
+  return {
+    pointsPerDollar: Number.isFinite(ppd) ? ppd : base.pointsPerDollar,
+    tierThresholds: Object.keys(tierThresholds).length ? tierThresholds : base.tierThresholds,
+    tierNames: Object.keys(tierNames).length ? tierNames : base.tierNames,
+    streakConfig: {
+      enabled: Boolean(sc?.enabled ?? base.streakConfig.enabled),
+      windowDays: Number(sc?.windowDays ?? base.streakConfig.windowDays),
+      bonusPoints: Number(sc?.bonusPoints ?? base.streakConfig.bonusPoints),
+      minVisitsForBonus: Number(sc?.minVisitsForBonus ?? base.streakConfig.minVisitsForBonus),
+    },
+  };
+}
+
+function mergeIntoProgramDoc(existing: any, settings: ProgramSettings) {
+  const current = existing ?? {};
+
+  // Preserve pointRules extras (pointsPerVisit, etc.)
+  const pointRules = {
+    ...(current.pointRules ?? {}),
+    pointsPerDollar: Number(settings.pointsPerDollar ?? 1),
+  };
+
+  // Preserve tier multiplier & any other tier fields
+  const existingTiers = Array.isArray(current.tiers) ? current.tiers : [];
+  const existingById = new Map<string, any>();
+  for (const t of existingTiers) {
+    const id = String(t?.id ?? "").trim();
+    if (id) existingById.set(id, t);
+  }
+
+  const ids = Object.keys(settings.tierThresholds ?? {});
+  const tiers = ids.map((id) => {
+    const prev = existingById.get(id) ?? {};
+    const requiredPoints = Number(settings.tierThresholds[id] ?? 0);
+    const name = settings.tierNames?.[id] ?? prev.name ?? id;
+
+    return {
+      ...prev,
+      id,
+      name,
+      requiredPoints,
+      // keep multiplier if it exists; default to 1 if new tier
+      multiplier: prev.multiplier ?? 1,
     };
-  }, [orgId]);
+  });
 
-  async function handleSave(settings: ProgramSettings) {
-    try {
-      setSaving(true);
-      setError(null);
-      setSuccess(null);
+  // Sort tiers by requiredPoints ascending
+  tiers.sort((a, b) => Number(a.requiredPoints ?? 0) - Number(b.requiredPoints ?? 0));
 
-      await saveProgramSettingsForOrg(orgId, settings);
-      setSuccess("Program settings saved.");
-      setInitialSettings(settings);
-    } catch (e: any) {
-      console.error("[LoyaltyAdminSettings] save error:", e);
-      setError(e?.message || "Failed to save program settings.");
-    } finally {
-      setSaving(false);
+  return {
+    ...current,
+    pointRules,
+    tiers,
+    streakConfig: settings.streakConfig ?? current.streakConfig,
+    updatedAt: new Date(),
+  };
+}
+
+export async function GET(_req: NextRequest) {
+  try {
+    const org = String(getLockedOrgId());
+    const snap = await programDocRef(org).get();
+
+    if (!snap.exists) {
+      // If missing, return defaults (don’t create automatically)
+      return NextResponse.json(defaultSettings(), { status: 200 });
     }
+
+    return NextResponse.json(toSettings(snap.data()), { status: 200 });
+  } catch (e: any) {
+    console.error("[loyalty:admin:settings] GET error:", e);
+    return NextResponse.json({ error: e?.message || "Failed to load settings." }, { status: 500 });
   }
+}
 
-  const header = (
-    <div className="flex items-center justify-between gap-3">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.25em] text-emerald-400/80">
-          NeonHQ · RewardCircle
-        </p>
-        <h1 className="text-2xl font-semibold text-slate-50">
-          Program Settings
-        </h1>
-        <p className="text-sm text-slate-400">
-          Control how points, tiers, and streak bonuses work.
-        </p>
-      </div>
+export async function POST(req: NextRequest) {
+  try {
+    const org = String(getLockedOrgId());
+    const body = (await req.json().catch(() => null)) as ProgramSettings | null;
 
-      <button
-        type="button"
-        onClick={() => router.push(`/orgs/${orgId}/loyalty/admin`)}
-        className="rounded-md border border-slate-600 px-3 py-1.5 text-xs hover:bg-white hover:text-black"
-      >
-        Back to Dashboard
-      </button>
-    </div>
-  );
+    if (!body) {
+      return NextResponse.json({ error: "Missing settings payload." }, { status: 400 });
+    }
 
-  // 1) Loading state
-  if (loading && !initialSettings && !error) {
-    return (
-      <section className="space-y-6">
-        {header}
-        <p className="text-sm text-slate-400">Loading program settings…</p>
-      </section>
-    );
+    const ref = programDocRef(org);
+    const snap = await ref.get();
+    const existing = snap.exists ? snap.data() : {};
+
+    const nextDoc = mergeIntoProgramDoc(existing, body);
+
+    await ref.set(nextDoc, { merge: true });
+
+    // Optional but recommended: keep legacy org.programSettings in sync (helps older pages)
+    await adminDb.doc(`orgs/${org}`).set({ programSettings: body }, { merge: true });
+
+    return NextResponse.json({ ok: true }, { status: 200 });
+  } catch (e: any) {
+    console.error("[loyalty:admin:settings] POST error:", e);
+    return NextResponse.json({ error: e?.message || "Failed to save settings." }, { status: 500 });
   }
-
-  // 2) Error state with no settings loaded
-  if (error && !initialSettings) {
-    return (
-      <section className="space-y-6">
-        {header}
-        <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">
-          {error}
-        </div>
-      </section>
-    );
-  }
-
-  // 3) Normal state – we have settings
-  return (
-    <section className="space-y-6">
-      {header}
-
-      {initialSettings && (
-        <LoyaltySettingsForm
-          initialSettings={initialSettings}
-          saving={saving}
-          error={error}
-          success={success}
-          onSubmit={handleSave}
-        />
-      )}
-    </section>
-  );
 }

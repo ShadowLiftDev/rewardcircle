@@ -23,7 +23,7 @@ type LoadedCustomer = {
   email?: string;
   pointsBalance: number;
   lifetimePoints: number;
-  currentTier: "tier1" | "tier2" | "tier3" | "tier4";
+  currentTier: string;
   streakCount: number;
 };
 
@@ -55,7 +55,7 @@ export default function CustomerWalletPage() {
     const { phone, email } = splitContact(raw);
 
     if (!phone && !email) {
-      setLoadError("Enter a valid phone number or email.");
+      setLoadError("Enter a valid phone number.");
       return;
     }
 
@@ -181,7 +181,7 @@ export default function CustomerWalletPage() {
         </p>
         <h1 className="text-2xl font-semibold">Your RewardCircle Wallet</h1>
         <p className="text-sm text-slate-300/80">
-          Enter your phone/email to view your points, tier, and available
+          Enter your phone number to view your points, tier, and available
           rewards.
         </p>
       </div>
@@ -194,7 +194,7 @@ export default function CustomerWalletPage() {
         >
           <div className="flex-1">
             <label className="mb-1 block text-xs text-slate-300/90">
-              Phone or Email
+              Phone Number
             </label>
             <input
               value={phoneOrEmail}

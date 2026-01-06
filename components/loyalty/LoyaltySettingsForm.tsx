@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useMemo, useState, FormEvent } from "react";
 import type { ProgramSettings } from "@/lib/types";
 
 type LoyaltySettingsFormProps = {
@@ -11,6 +11,20 @@ type LoyaltySettingsFormProps = {
   onSubmit: (settings: ProgramSettings) => Promise<void>;
 };
 
+type TierRow = {
+  id: string; // e.g. "starter"
+  name: string; // e.g. "Starter"
+  requiredPoints: string; // keep as string for controlled input
+};
+
+function normalizeId(raw: string) {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-_]/g, "");
+}
+
 export function LoyaltySettingsForm({
   initialSettings,
   saving,
@@ -20,15 +34,7 @@ export function LoyaltySettingsForm({
 }: LoyaltySettingsFormProps) {
   const [pointsPerDollar, setPointsPerDollar] = useState("1");
 
-  const [tier1, setTier1] = useState("0");
-  const [tier2, setTier2] = useState("500");
-  const [tier3, setTier3] = useState("1000");
-  const [tier4, setTier4] = useState("2000");
-
-  const [tier1Name, setTier1Name] = useState("");
-  const [tier2Name, setTier2Name] = useState("");
-  const [tier3Name, setTier3Name] = useState("");
-  const [tier4Name, setTier4Name] = useState("");
+  const [tiers, setTiers] = useState<TierRow[]>([]);
 
   const [streakEnabled, setStreakEnabled] = useState(true);
   const [streakWindowDays, setStreakWindowDays] = useState("2");
@@ -40,24 +46,30 @@ export function LoyaltySettingsForm({
 
     setPointsPerDollar(String(ps.pointsPerDollar ?? 1));
 
-    const thresholds = ps.tierThresholds ?? {
-      tier1: 0,
-      tier2: 500,
-      tier3: 1000,
-      tier4: 2000,
-    };
-    setTier1(String(thresholds.tier1 ?? 0));
-    setTier2(String(thresholds.tier2 ?? 500));
-    setTier3(String(thresholds.tier3 ?? 1000));
-    setTier4(
-      typeof thresholds.tier4 === "number" ? String(thresholds.tier4) : "",
-    );
-
+    const thresholds = ps.tierThresholds ?? {};
     const names = ps.tierNames ?? {};
-    setTier1Name(names.tier1 ?? "");
-    setTier2Name(names.tier2 ?? "");
-    setTier3Name(names.tier3 ?? "");
-    setTier4Name(names.tier4 ?? "");
+
+    const rows: TierRow[] = Object.entries(thresholds)
+      .map(([id, requiredPoints]) => ({
+        id: String(id),
+        name: String(names[id] ?? ""),
+        requiredPoints: String(
+          Number.isFinite(Number(requiredPoints)) ? Number(requiredPoints) : 0,
+        ),
+      }))
+      .sort((a, b) => Number(a.requiredPoints) - Number(b.requiredPoints));
+
+    // If nothing loaded, seed sensible defaults
+    setTiers(
+      rows.length
+        ? rows
+        : [
+            { id: "starter", name: "Starter", requiredPoints: "250" },
+            { id: "intermediate", name: "Intermediate", requiredPoints: "1000" },
+            { id: "expert", name: "Expert", requiredPoints: "2500" },
+            { id: "vip", name: "VIP", requiredPoints: "5000" },
+          ],
+    );
 
     const streak = ps.streakConfig ?? {
       enabled: true,
@@ -71,34 +83,67 @@ export function LoyaltySettingsForm({
     setStreakMinVisits(String(streak.minVisitsForBonus ?? 3));
   }, [initialSettings]);
 
+  const tierIdsLower = useMemo(
+    () => new Set(tiers.map((t) => normalizeId(t.id))),
+    [tiers],
+  );
+
+  function updateTier(index: number, patch: Partial<TierRow>) {
+    setTiers((prev) => prev.map((t, i) => (i === index ? { ...t, ...patch } : t)));
+  }
+
+  function addTier() {
+    // pick a unique id
+    let base = "new-tier";
+    let id = base;
+    let n = 2;
+    while (tierIdsLower.has(id)) {
+      id = `${base}-${n++}`;
+    }
+
+    setTiers((prev) => [
+      ...prev,
+      { id, name: "", requiredPoints: "0" },
+    ]);
+  }
+
+  function removeTier(index: number) {
+    setTiers((prev) => prev.filter((_, i) => i !== index));
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
     const p = Number(pointsPerDollar) || 0;
-    const t1 = Number(tier1) || 0;
-    const t2 = Number(tier2) || 0;
-    const t3 = Number(tier3) || 0;
-    const rawT4 =
-      tier4.trim() === "" ? undefined : Number(tier4) || undefined;
 
     const windowDays = Number(streakWindowDays) || 0;
     const bonusPoints = Number(streakBonusPoints) || 0;
     const minVisits = Number(streakMinVisits) || 0;
 
+    // Build thresholds + names from tiers
+    const tierThresholds: Record<string, number> = {};
+    const tierNames: Record<string, string> = {};
+
+    for (const row of tiers) {
+      const id = normalizeId(row.id);
+      if (!id) continue;
+
+      const req = Number(row.requiredPoints);
+      tierThresholds[id] = Number.isFinite(req) ? req : 0;
+
+      const nm = row.name.trim();
+      if (nm) tierNames[id] = nm;
+    }
+
+    // Safety: must have at least 1 tier
+    if (Object.keys(tierThresholds).length === 0) {
+      throw new Error("Add at least one tier before saving.");
+    }
+
     const settings: ProgramSettings = {
       pointsPerDollar: p,
-      tierThresholds: {
-        tier1: t1,
-        tier2: t2,
-        tier3: t3,
-        ...(typeof rawT4 === "number" ? { tier4: rawT4 } : {}),
-      },
-      tierNames: {
-        ...(tier1Name ? { tier1: tier1Name } : {}),
-        ...(tier2Name ? { tier2: tier2Name } : {}),
-        ...(tier3Name ? { tier3: tier3Name } : {}),
-        ...(tier4Name ? { tier4: tier4Name } : {}),
-      },
+      tierThresholds,
+      tierNames,
       streakConfig: {
         enabled: streakEnabled,
         windowDays,
@@ -129,9 +174,7 @@ export function LoyaltySettingsForm({
 
       {/* Points per $1 */}
       <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-slate-100">
-          Earning rate
-        </h2>
+        <h2 className="text-sm font-semibold text-slate-100">Earning rate</h2>
         <p className="text-xs text-slate-400">
           How many points a customer earns for each $1 spent.
         </p>
@@ -151,124 +194,105 @@ export function LoyaltySettingsForm({
 
       {/* Tier thresholds */}
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-slate-100">
-          Tier thresholds
-        </h2>
-        <p className="text-xs text-slate-400">
-          Set the lifetime points needed to reach each tier.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="space-y-1">
-            <label className="block text-xs text-slate-400">
-              Tier 1 – minimum points
-            </label>
-            <input
-              type="number"
-              min={0}
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-50 outline-none focus:border-emerald-500"
-              value={tier1}
-              onChange={(e) => setTier1(e.target.value)}
-            />
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-100">Tiers</h2>
+            <p className="text-xs text-slate-400">
+              Edit tier IDs (used internally), names, and lifetime point thresholds.
+            </p>
           </div>
-          <div className="space-y-1">
-            <label className="block text-xs text-slate-400">
-              Tier 2 – minimum points
-            </label>
-            <input
-              type="number"
-              min={0}
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-50 outline-none focus:border-emerald-500"
-              value={tier2}
-              onChange={(e) => setTier2(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="block text-xs text-slate-400">
-              Tier 3 – minimum points
-            </label>
-            <input
-              type="number"
-              min={0}
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-50 outline-none focus:border-emerald-500"
-              value={tier3}
-              onChange={(e) => setTier3(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="block text-xs text-slate-400">
-              Tier 4 – minimum points (optional)
-            </label>
-            <input
-              type="number"
-              min={0}
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-50 outline-none focus:border-emerald-500"
-              value={tier4}
-              onChange={(e) => setTier4(e.target.value)}
-              placeholder="Leave blank to disable"
-            />
-          </div>
-        </div>
-      </div>
 
-      {/* Tier names */}
-      <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-slate-100">
-          Tier names
-        </h2>
-        <p className="text-xs text-slate-400">
-          Optional labels shown in the app instead of generic “Tier 1 / 2 / 3”.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="space-y-1">
-            <label className="block text-xs text-slate-400">Tier 1 name</label>
-            <input
-              type="text"
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-50 outline-none focus:border-emerald-500"
-              value={tier1Name}
-              onChange={(e) => setTier1Name(e.target.value)}
-              placeholder="e.g. Neon"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="block text-xs text-slate-400">Tier 2 name</label>
-            <input
-              type="text"
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-50 outline-none focus:border-emerald-500"
-              value={tier2Name}
-              onChange={(e) => setTier2Name(e.target.value)}
-              placeholder="e.g. Cosmic"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="block text-xs text-slate-400">Tier 3 name</label>
-            <input
-              type="text"
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-50 outline-none focus:border-emerald-500"
-              value={tier3Name}
-              onChange={(e) => setTier3Name(e.target.value)}
-              placeholder="e.g. Galactic"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="block text-xs text-slate-400">
-              Tier 4 name (optional)
-            </label>
-            <input
-              type="text"
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-50 outline-none focus:border-emerald-500"
-              value={tier4Name}
-              onChange={(e) => setTier4Name(e.target.value)}
-              placeholder="e.g. Supernova"
-            />
-          </div>
+          <button
+            type="button"
+            onClick={addTier}
+            className="rounded-md border border-slate-600 px-3 py-1.5 text-xs hover:bg-white hover:text-black"
+          >
+            Add tier
+          </button>
+        </div>
+
+        <div className="grid gap-3">
+          {tiers.map((t, idx) => {
+            const normalized = normalizeId(t.id);
+            const duplicate =
+              normalized &&
+              tiers.filter((x) => normalizeId(x.id) === normalized).length > 1;
+
+            return (
+              <div
+                key={`${t.id}-${idx}`}
+                className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"
+              >
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <label className="block text-xs text-slate-400">
+                      Tier ID (e.g. starter)
+                    </label>
+                    <input
+                      type="text"
+                      className={`w-full rounded-md border bg-slate-900 px-2 py-1.5 text-sm text-slate-50 outline-none focus:border-emerald-500 ${
+                        duplicate ? "border-red-500/60" : "border-slate-700"
+                      }`}
+                      value={t.id}
+                      onChange={(e) => updateTier(idx, { id: e.target.value })}
+                      placeholder="starter"
+                    />
+                    {duplicate && (
+                      <p className="text-[11px] text-red-200">
+                        Tier IDs must be unique.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs text-slate-400">
+                      Tier name (shown in UI)
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-50 outline-none focus:border-emerald-500"
+                      value={t.name}
+                      onChange={(e) => updateTier(idx, { name: e.target.value })}
+                      placeholder="Starter"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs text-slate-400">
+                      Required lifetime points
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-50 outline-none focus:border-emerald-500"
+                      value={t.requiredPoints}
+                      onChange={(e) =>
+                        updateTier(idx, { requiredPoints: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => removeTier(idx)}
+                    className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:bg-red-500/10 hover:text-red-200"
+                    disabled={tiers.length <= 1}
+                    title={tiers.length <= 1 ? "You need at least one tier." : ""}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* Streak config */}
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-slate-100">
-          Visit streak bonus
-        </h2>
+        <h2 className="text-sm font-semibold text-slate-100">Visit streak bonus</h2>
         <p className="text-xs text-slate-400">
           Reward customers for visiting multiple times within a short window.
         </p>
@@ -293,9 +317,7 @@ export function LoyaltySettingsForm({
         {streakEnabled && (
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1">
-              <label className="block text-xs text-slate-400">
-                Window (days)
-              </label>
+              <label className="block text-xs text-slate-400">Window (days)</label>
               <input
                 type="number"
                 min={1}
@@ -317,9 +339,7 @@ export function LoyaltySettingsForm({
               />
             </div>
             <div className="space-y-1">
-              <label className="block text-xs text-slate-400">
-                Bonus points
-              </label>
+              <label className="block text-xs text-slate-400">Bonus points</label>
               <input
                 type="number"
                 min={0}
