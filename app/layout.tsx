@@ -1,43 +1,91 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
-import "./globals.css";
-import { AuthProvider } from "@/components/auth/AuthProvider";
-import DevToolbar from "@/components/dev/DevToolbar";
+"use client";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
+import { useParams, usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import { doc, getDoc } from "firebase/firestore";
+import { getClientDb } from "@/lib/firebase-client";
+import { useAuth } from "@/components/auth/AuthProvider";
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import { NeonPage } from "@/components/neon/NeonPage";
+import { NeonSection } from "@/components/neon/NeonSection";
 
-export const metadata: Metadata = {
-  title: "NeonHQ",
-  description: "Tools powering The Neon Lunchbox ecosystem.",
-};
+export default function OrgLayout({ children }: { children: ReactNode }) {
+  const { orgId } = useParams<{ orgId: string }>();
+  const pathname = usePathname();
+  const router = useRouter();
+  const { user, signOut } = useAuth();
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const [orgName, setOrgName] = useState<string>("");
+
+  useEffect(() => {
+    if (!orgId) return;
+    let alive = true;
+
+    (async () => {
+      try {
+        const db = getClientDb();
+        const snap = await getDoc(doc(db, "orgs", String(orgId)));
+        if (!alive) return;
+        setOrgName(snap.exists() ? snap.data()?.name ?? String(orgId) : String(orgId));
+      } catch {
+        setOrgName(String(orgId));
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [orgId]);
+
+  async function handleSignOut() {
+    await signOut();
+    router.push("/");
+  }
+
+  const displayName = orgName || orgId || "Your business";
+
+  const joinHref = "https://neon-hq.vercel.app/orgs/neon-lunchbox/join";
+
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-950 text-slate-50 relative`}
-      >
-        {/* 🔥 Neon Ambient Background */}
-        <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute -top-40 left-[5%] h-72 w-72 rounded-full bg-cyan-500/20 blur-3xl" />
-          <div className="absolute top-10 right-[5%] h-72 w-72 rounded-full bg-purple-500/20 blur-3xl" />
-          <div className="absolute bottom-[-20%] left-1/2 h-96 w-[40rem] -translate-x-1/2 rounded-[999px] bg-gradient-to-r from-cyan-500/10 via-sky-400/5 to-purple-500/10 blur-[110px]" />
-        </div>
+    <NeonPage>
+      <NeonSection>
+        {/* Header */}
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.25em] text-slate-400/90">
+              {displayName}
+            </p>
+            <h1 className="text-lg font-semibold text-slate-50">Business Console</h1>
+            <p className="text-xs text-slate-400">
+              Manage loyalty, referrals, and more for your location.
+            </p>
+          </div>
 
-        <AuthProvider>
-          {children}
-          <DevToolbar />
-        </AuthProvider>
-      </body>
-    </html>
+          <div className="flex items-center gap-2">
+            <Link
+              href={joinHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-100 hover:text-slate-900"
+            >
+              Join
+            </Link>
+
+            {user && (
+              <button
+                onClick={handleSignOut}
+                className="rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-100 hover:text-slate-900"
+              >
+                Sign out
+              </button>
+            )}
+          </div>
+        </header>
+
+        <div className="pt-2">{children}</div>
+      </NeonSection>
+    </NeonPage>
   );
 }
