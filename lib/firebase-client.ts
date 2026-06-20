@@ -7,7 +7,7 @@ import { getFirestore, type Firestore } from "firebase/firestore";
 let app: FirebaseApp | null = null;
 
 function getFirebaseApp(): FirebaseApp {
-  // Safety: this should only ever run in the browser
+  // Safety: this should only ever run in the browser.
   if (typeof window === "undefined") {
     throw new Error(
       "getFirebaseApp() was called on the server. Use the Admin SDK on the server and firebase-client only in client components.",
@@ -41,14 +41,16 @@ function getFirebaseApp(): FirebaseApp {
     );
   }
 
-  app = initializeApp({
+  const firebaseConfig = {
     apiKey,
     authDomain,
     projectId,
     storageBucket,
     messagingSenderId,
     appId,
-  });
+  };
+
+  app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
   return app;
 }

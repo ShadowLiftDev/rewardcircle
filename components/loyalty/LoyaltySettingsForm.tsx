@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, FormEvent } from "react";
-import type { ProgramSettings } from "@/lib/types";
+import type { ProgramSettings } from "@/lib/rewardcircle/types";
 
 type LoyaltySettingsFormProps = {
   initialSettings: ProgramSettings;

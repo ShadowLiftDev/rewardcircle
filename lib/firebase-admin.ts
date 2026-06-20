@@ -1,9 +1,11 @@
 import "server-only";
+
 import {
   getApps,
   initializeApp,
   applicationDefault,
   cert,
+  type App,
 } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import {
@@ -18,10 +20,14 @@ type ServiceAccount = {
   private_key?: string;
 };
 
-function initAdmin() {
-  if (getApps().length) return;
+function initAdmin(): App {
+  const existingApp = getApps()[0];
 
-  // Prevent accidental use on Edge
+  if (existingApp) {
+    return existingApp;
+  }
+
+  // Prevent accidental use on Edge.
   if (process.env.NEXT_RUNTIME === "edge") {
     throw new Error(
       "Firebase Admin cannot run on the Edge runtime. " +
@@ -31,12 +37,15 @@ function initAdmin() {
 
   const b64 = process.env.FIREBASE_ADMIN_CREDENTIALS_BASE64 || "";
   const raw = process.env.FIREBASE_ADMIN_CREDENTIALS_JSON || "";
-  const hasADCFile = !!process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  const hasADCFile = Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS);
 
   if (b64 || raw) {
     let jsonStr: string;
+
     try {
-      jsonStr = raw ? raw.trim() : Buffer.from(b64.trim(), "base64").toString("utf8");
+      jsonStr = raw
+        ? raw.trim()
+        : Buffer.from(b64.trim(), "base64").toString("utf8");
     } catch {
       throw new Error(
         "Failed to decode FIREBASE_ADMIN_CREDENTIALS_BASE64. Ensure it is the base64 of the FULL service account JSON.",
@@ -44,6 +53,7 @@ function initAdmin() {
     }
 
     let creds: ServiceAccount;
+
     try {
       creds = JSON.parse(jsonStr) as ServiceAccount;
     } catch {
@@ -58,12 +68,12 @@ function initAdmin() {
       );
     }
 
-    // Normalize newline issues from envs (Vercel/Windows/etc)
+    // Normalize newline issues from envs such as Vercel, Windows, and shell escaping.
     const normalizedKey = creds.private_key
       .replace(/\r\n/g, "\n")
       .replace(/\\n/g, "\n");
 
-    initializeApp({
+    return initializeApp({
       credential: cert({
         projectId: creds.project_id,
         clientEmail: creds.client_email,
@@ -71,27 +81,34 @@ function initAdmin() {
       }),
       projectId: creds.project_id,
     });
-  } else if (hasADCFile) {
-    // GOOGLE_APPLICATION_CREDENTIALS points to a JSON file with a service account
-    initializeApp({ credential: applicationDefault() });
-  } else {
-    throw new Error(
-      "Admin SDK creds not found. Set FIREBASE_ADMIN_CREDENTIALS_BASE64 (preferred) or " +
-        "FIREBASE_ADMIN_CREDENTIALS_JSON, or provide GOOGLE_APPLICATION_CREDENTIALS pointing to a service account JSON file.",
-    );
   }
+
+  if (hasADCFile) {
+    const projectId =
+      process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
+
+    return initializeApp({
+      credential: applicationDefault(),
+      ...(projectId ? { projectId } : {}),
+    });
+  }
+
+  throw new Error(
+    "Admin SDK creds not found. Set FIREBASE_ADMIN_CREDENTIALS_BASE64 (preferred) or " +
+      "FIREBASE_ADMIN_CREDENTIALS_JSON, or provide GOOGLE_APPLICATION_CREDENTIALS pointing to a service account JSON file.",
+  );
 }
 
-initAdmin();
+export const adminApp = initAdmin();
 
-export const adminAuth = getAuth();
-export const adminDb = getFirestore();
+export const adminAuth = getAuth(adminApp);
+export const adminDb = getFirestore(adminApp);
 
 try {
-  // @ts-ignore - settings exists on admin Firestore for most versions
+  // settings exists on admin Firestore for most versions.
   adminDb.settings?.({ ignoreUndefinedProperties: true });
 } catch {
-  // safe no-op across versions
+  // Safe no-op across versions.
 }
 
 export { FieldValue, Timestamp };
