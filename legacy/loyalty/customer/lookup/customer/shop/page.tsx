@@ -3,8 +3,8 @@
 import { useState, type FormEvent, useMemo } from "react";
 import { useParams } from "next/navigation";
 
-import { NeonSection } from "@/components/neon/NeonSection";
-import { NeonCard } from "@/components/neon/NeonCard";
+import { NeonSection } from "@/legacy/components/neon/NeonSection";
+import { NeonCard } from "@/legacy/components/neon/NeonCard";
 
 type RewardStoreItem = {
   id: string;

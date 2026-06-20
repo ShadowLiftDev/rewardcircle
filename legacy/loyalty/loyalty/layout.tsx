@@ -8,8 +8,8 @@ import { doc, getDoc } from "firebase/firestore";
 import { getClientDb } from "@/lib/firebase-client";
 import { useAuth } from "@/components/auth/AuthProvider";
 
-import { NeonPage } from "@/components/neon/NeonPage";
-import { NeonSection } from "@/components/neon/NeonSection";
+import { NeonPage } from "@/legacy/components/neon/NeonPage";
+import { NeonSection } from "@/legacy/components/neon/NeonSection";
 
 export default function OrgLayout({ children }: { children: ReactNode }) {
   const { orgId } = useParams<{ orgId: string }>();

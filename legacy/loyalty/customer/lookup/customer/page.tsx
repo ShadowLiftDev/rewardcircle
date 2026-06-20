@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 
-import { NeonSection } from "@/components/neon/NeonSection";
-import { NeonCard } from "@/components/neon/NeonCard";
+import { NeonSection } from "@/legacy/components/neon/NeonSection";
+import { NeonCard } from "@/legacy/components/neon/NeonCard";
 import type { ProgramSettings } from "@/lib/rewardcircle/types";
 
 type RewardStoreItem = {
