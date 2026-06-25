@@ -1,15 +1,12 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
 import { adminDb } from "@/lib/firebase-admin";
 import { getPublicRewardCircleProgramInfo } from "@/lib/rewardcircle/core-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-const MEMBER_SESSION_COOKIE = "member_session";
 
 type RouteContext = {
   params:
@@ -19,6 +16,13 @@ type RouteContext = {
     | Promise<{
         orgId?: string;
       }>;
+};
+
+type LookupBody = {
+  type?: "phone" | "email";
+  value?: string;
+  phone?: string;
+  email?: string;
 };
 
 type PublicTier = {
@@ -65,8 +69,44 @@ async function resolveOrgId(context: RouteContext) {
   return orgId;
 }
 
-function hashToken(token: string) {
-  return crypto.createHash("sha256").update(token).digest("hex");
+function cleanString(value: unknown, max = 180): string | null {
+  if (typeof value !== "string") return null;
+  const cleaned = value.trim();
+  return cleaned ? cleaned.slice(0, max) : null;
+}
+
+function normalizeEmail(value: unknown): string | null {
+  const email = cleanString(value, 180)?.toLowerCase();
+  return email && email.includes("@") ? email : null;
+}
+
+function normalizePhone(value: unknown): string | null {
+  const raw = cleanString(value, 40);
+  if (!raw) return null;
+
+  const digits = raw.replace(/\D/g, "");
+
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  if (raw.startsWith("+") && digits.length >= 10) return `+${digits}`;
+
+  return null;
+}
+
+function safeNumber(value: unknown, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function safeString(value: unknown, fallback = "") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function toStringOrNull(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  return text || null;
 }
 
 function toMillis(value: unknown): number {
@@ -117,28 +157,22 @@ function toMillis(value: unknown): number {
   return 0;
 }
 
-function isExpired(expiresAt: unknown) {
-  const expiresAtMs = toMillis(expiresAt);
-  if (!expiresAtMs) return true;
-  return expiresAtMs <= Date.now();
+function maskEmail(email: string | null) {
+  if (!email || !email.includes("@")) return null;
+
+  const [name, domain] = email.split("@");
+  const visible = name.slice(0, 2);
+
+  return `${visible}${name.length > 2 ? "•••" : "•"}@${domain}`;
 }
 
-function safeNumber(value: unknown, fallback = 0) {
-  const n = Number(value);
+function maskPhone(phone: string | null) {
+  if (!phone) return null;
 
-  return Number.isFinite(n) ? n : fallback;
-}
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 4) return "••••";
 
-function safeString(value: unknown, fallback = "") {
-  const text = String(value ?? "").trim();
-
-  return text || fallback;
-}
-
-function toStringOrNull(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const text = value.trim();
-  return text || null;
+  return `•••-•••-${digits.slice(-4)}`;
 }
 
 function normalizePublicTiers(rawTiers: unknown): PublicTier[] {
@@ -183,7 +217,6 @@ function buildTierProgress(
   tiers: PublicTier[],
 ): TierProgressResponse {
   const lifetimePointsEarned = safeNumber(state?.lifetimePointsEarned, 0);
-
   const safeTiers = tiers.length > 0 ? tiers : [defaultPublicTier()];
 
   const current =
@@ -234,29 +267,23 @@ function buildMemberResponse(
   orgLink: Record<string, any>,
   rewardState: Record<string, any>,
 ) {
+  const displayName =
+    toStringOrNull(rewardState.displayName) ||
+    toStringOrNull(member.displayName) ||
+    toStringOrNull(member.name) ||
+    "RewardCircle Member";
+
+  const phone =
+    toStringOrNull(rewardState.phone) || toStringOrNull(member.phone);
+
+  const email =
+    toStringOrNull(rewardState.email) || toStringOrNull(member.email);
+
   return {
     memberId,
-    displayName:
-      toStringOrNull(rewardState.displayName) ||
-      toStringOrNull(member.displayName) ||
-      toStringOrNull(member.name) ||
-      "RewardCircle Member",
-    phone:
-      toStringOrNull(rewardState.phone) ||
-      toStringOrNull(member.phone) ||
-      null,
-    phoneNormalized:
-      toStringOrNull(rewardState.phoneNormalized) ||
-      toStringOrNull(member.phoneNormalized) ||
-      null,
-    email:
-      toStringOrNull(rewardState.email) ||
-      toStringOrNull(member.email) ||
-      null,
-    emailNormalized:
-      toStringOrNull(rewardState.emailNormalized) ||
-      toStringOrNull(member.emailNormalized) ||
-      null,
+    displayName,
+    phone: maskPhone(phone),
+    email: maskEmail(email),
     roleType: toStringOrNull(orgLink.roleType) ?? "customer",
     orgStatus: toStringOrNull(orgLink.status) ?? "active",
     referralCode: toStringOrNull(orgLink.referralCode),
@@ -279,12 +306,6 @@ function buildWalletResponse(state: Record<string, any>) {
 
     welcomeGranted: Boolean(state.welcomeGranted),
 
-    joinedAt: state.joinedAt ?? null,
-    lastActivityAt: state.lastActivityAt ?? null,
-    lastVisitDate: state.lastVisitDate ?? null,
-    lastEarnedAt: state.lastEarnedAt ?? null,
-    lastRedeemedAt: state.lastRedeemedAt ?? null,
-
     joinedAtMs: toMillis(state.joinedAt),
     lastActivityAtMs: toMillis(state.lastActivityAt),
     lastVisitDateMs: toMillis(state.lastVisitDate),
@@ -298,70 +319,121 @@ function buildWalletResponse(state: Record<string, any>) {
 
 function errorStatus(message: string) {
   if (message === "Missing orgId.") return 400;
-  if (message === "No member session found.") return 401;
-  if (message === "Member session was not found.") return 401;
-  if (message === "Member session has expired.") return 401;
-  if (message === "Member session is missing member context.") return 401;
-  if (message === "Member was not found.") return 404;
+  if (message === "Phone or email is required.") return 400;
+  if (message === "Invalid phone number.") return 400;
+  if (message === "Invalid email address.") return 400;
+  if (message === "Member not found.") return 404;
+  if (message === "Multiple matching member records found.") return 409;
   if (message === "Member is not linked to this organization.") return 404;
   if (message === "Member relationship is not active.") return 403;
   if (message === "RewardCircle wallet was not found.") return 404;
   return 500;
 }
 
+async function resolveLookupInput(body: LookupBody) {
+  const explicitType = cleanString(body.type, 20);
+  const explicitValue = cleanString(body.value, 180);
+
+  if (explicitType === "email" || body.email) {
+    const emailNormalized = normalizeEmail(explicitValue ?? body.email);
+
+    if (!emailNormalized) {
+      throw new Error("Invalid email address.");
+    }
+
+    return {
+      type: "email" as const,
+      field: "emailNormalized" as const,
+      value: emailNormalized,
+    };
+  }
+
+  if (explicitType === "phone" || body.phone || explicitValue) {
+    const phoneNormalized = normalizePhone(explicitValue ?? body.phone);
+
+    if (!phoneNormalized) {
+      throw new Error("Invalid phone number.");
+    }
+
+    return {
+      type: "phone" as const,
+      field: "phoneNormalized" as const,
+      value: phoneNormalized,
+    };
+  }
+
+  throw new Error("Phone or email is required.");
+}
+
+async function findOrgLinkedMember({
+  orgId,
+  lookupField,
+  lookupValue,
+}: {
+  orgId: string;
+  lookupField: "phoneNormalized" | "emailNormalized";
+  lookupValue: string;
+}) {
+  const memberSnap = await adminDb
+    .collection("members")
+    .where(lookupField, "==", lookupValue)
+    .limit(10)
+    .get();
+
+  if (memberSnap.empty) {
+    throw new Error("Member not found.");
+  }
+
+  const matches = [];
+
+  for (const memberDoc of memberSnap.docs) {
+    const orgLinkRef = memberDoc.ref.collection("orgLinks").doc(orgId);
+    const orgLinkSnap = await orgLinkRef.get();
+
+    if (!orgLinkSnap.exists) continue;
+
+    const orgLink = orgLinkSnap.data() || {};
+    const status = toStringOrNull(orgLink.status) ?? "inactive";
+
+    if (status !== "active") {
+      continue;
+    }
+
+    matches.push({
+      memberId: memberDoc.id,
+      member: memberDoc.data() || {},
+      orgLink,
+      orgLinkRef,
+    });
+  }
+
+  if (matches.length === 0) {
+    throw new Error("Member is not linked to this organization.");
+  }
+
+  if (matches.length > 1) {
+    throw new Error("Multiple matching member records found.");
+  }
+
+  return matches[0];
+}
+
 // -----------------------------------------------------------------------------
-// GET — read current member RewardCircle wallet from member_session
+// POST — explicit RewardCircle wallet lookup by phone/email
 // -----------------------------------------------------------------------------
 
-export async function GET(req: NextRequest, context: RouteContext) {
+export async function POST(req: NextRequest, context: RouteContext) {
   try {
     const orgId = await resolveOrgId(context);
+    const body = (await req.json().catch(() => ({}))) as LookupBody;
 
-    const sessionToken = req.cookies.get(MEMBER_SESSION_COOKIE)?.value;
+    const lookup = await resolveLookupInput(body);
 
-    if (!sessionToken) {
-      throw new Error("No member session found.");
-    }
-
-    const tokenHash = hashToken(sessionToken);
-
-    const sessionSnap = await adminDb
-      .collection("systems")
-      .doc("sessions")
-      .collection("members")
-      .where("tokenHash", "==", tokenHash)
-      .where("orgId", "==", orgId)
-      .where("status", "==", "active")
-      .limit(1)
-      .get();
-
-    if (sessionSnap.empty) {
-      throw new Error("Member session was not found.");
-    }
-
-    const sessionDoc = sessionSnap.docs[0];
-    const session = sessionDoc.data() || {};
-
-    if (isExpired(session.expiresAt)) {
-      await sessionDoc.ref.set(
-        {
-          status: "expired",
-          updatedAt: new Date(),
-        },
-        { merge: true },
-      );
-
-      throw new Error("Member session has expired.");
-    }
-
-    const memberId = toStringOrNull(session.memberId);
-
-    if (!memberId) {
-      throw new Error("Member session is missing member context.");
-    }
-
-    const memberRef = adminDb.collection("members").doc(memberId);
-    const orgLinkRef = memberRef.collection("orgLinks").doc(orgId);
+    const { memberId, member, orgLink, orgLinkRef } = await findOrgLinkedMember({
+      orgId,
+      lookupField: lookup.field,
+      lookupValue: lookup.value,
+    });
 
     const rewardCircleStateRef = orgLinkRef
       .collection("modules")
@@ -369,28 +441,10 @@ export async function GET(req: NextRequest, context: RouteContext) {
       .collection("state")
       .doc("current");
 
-    const [memberSnap, orgLinkSnap, rewardCircleStateSnap, publicProgram] =
-      await Promise.all([
-        memberRef.get(),
-        orgLinkRef.get(),
-        rewardCircleStateRef.get(),
-        getPublicRewardCircleProgramInfo(orgId),
-      ]);
-
-    if (!memberSnap.exists) {
-      throw new Error("Member was not found.");
-    }
-
-    if (!orgLinkSnap.exists) {
-      throw new Error("Member is not linked to this organization.");
-    }
-
-    const member = memberSnap.data() || {};
-    const orgLink = orgLinkSnap.data() || {};
-
-    if ((toStringOrNull(orgLink.status) ?? "inactive") !== "active") {
-      throw new Error("Member relationship is not active.");
-    }
+    const [rewardCircleStateSnap, publicProgram] = await Promise.all([
+      rewardCircleStateRef.get(),
+      getPublicRewardCircleProgramInfo(orgId),
+    ]);
 
     if (!rewardCircleStateSnap.exists) {
       throw new Error("RewardCircle wallet was not found.");
@@ -403,7 +457,12 @@ export async function GET(req: NextRequest, context: RouteContext) {
     return noStoreJson(
       {
         found: true,
-        authenticated: true,
+        authenticated: false,
+
+        lookup: {
+          type: lookup.type,
+          matched: true,
+        },
 
         member: buildMemberResponse(memberId, member, orgLink, rewardState),
         wallet: buildWalletResponse(rewardState),
@@ -421,25 +480,15 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
         tierProgress,
 
-        session: {
-          sessionId: toStringOrNull(session.sessionId) ?? sessionDoc.id,
-          memberId,
-          orgId,
-          expiresAtMs: toMillis(session.expiresAt),
-          createdAtMs: toMillis(session.createdAt),
-          status: toStringOrNull(session.status) ?? "active",
-        },
-
         meta: {
           generatedAtMs: Date.now(),
           sourcePaths: {
             member: `members/${memberId}`,
             orgLink: `members/${memberId}/orgLinks/${orgId}`,
             rewardCircleState: `members/${memberId}/orgLinks/${orgId}/modules/rewardcircle/state/current`,
-            session: `systems/sessions/members/${sessionDoc.id}`,
           },
           doctrine:
-            "RewardCircle me reads the current member wallet through the member_session cookie. It does not identify members by phone.",
+            "RewardCircle lookup finds an existing org-scoped member wallet by phone or email. It does not create members, sessions, or module state.",
         },
       },
       {
@@ -447,9 +496,9 @@ export async function GET(req: NextRequest, context: RouteContext) {
       },
     );
   } catch (error: any) {
-    console.error("[rewardcircle:customer:me:GET] error:", error);
+    console.error("[rewardcircle:customer:lookup:POST] error:", error);
 
-    const message = error?.message || "Failed to load RewardCircle wallet.";
+    const message = error?.message || "Failed to look up RewardCircle wallet.";
 
     return noStoreJson(
       {

@@ -92,6 +92,12 @@ type RewardCircleWallet = {
   lastVisitDate?: unknown;
   lastEarnedAt?: unknown;
   lastRedeemedAt?: unknown;
+
+  joinedAtMs?: number;
+  lastActivityAtMs?: number;
+  lastVisitDateMs?: number;
+  lastEarnedAtMs?: number;
+  lastRedeemedAtMs?: number;
 };
 
 type RewardCirclePublicProgram = {
@@ -119,13 +125,26 @@ type RewardCircleTierProgress = {
 type WalletResponse =
   | {
       found: true;
+      authenticated?: boolean;
       member: RewardCircleMember;
       wallet: RewardCircleWallet;
-      program: RewardCirclePublicProgram;
+      program?: RewardCirclePublicProgram;
       tierProgress: RewardCircleTierProgress;
+      session?: {
+        sessionId?: string;
+        memberId?: string;
+        orgId?: string;
+        expiresAtMs?: number;
+      };
+      lookup?: {
+        type?: "phone" | "email";
+        matched?: boolean;
+      };
     }
   | {
       found: false;
+      authenticated?: false;
+      reason?: string;
       error?: string;
     };
 
@@ -396,6 +415,40 @@ export default function RewardCircleShopClient({
     setTierProgress(null);
   }
 
+  async function loadSessionWallet() {
+  if (!orgId) {
+    setWalletError("This RewardCircle page is missing an organization ID.");
+    return;
+  }
+
+  setWalletLoading(true);
+  setWalletError(null);
+
+  try {
+    const res = await fetch(`/api/orgs/${orgId}/customer/reward-circle/me`, {
+      method: "GET",
+      cache: "no-store",
+      credentials: "include",
+    });
+
+    const data = (await res.json().catch(() => ({}))) as WalletResponse;
+
+    if (!res.ok || !data.found) {
+      clearWalletState();
+      return;
+    }
+
+    setMember(data.member);
+    setWallet(data.wallet);
+    setTierProgress(data.tierProgress);
+  } catch (error: any) {
+    console.error(error);
+    clearWalletState();
+  } finally {
+    setWalletLoading(false);
+  }
+}
+
   async function loadShop() {
     if (!orgId) {
       setShopError("This RewardCircle shop is missing an organization ID.");
@@ -441,66 +494,62 @@ export default function RewardCircleShopClient({
     }
   }
 
-  async function performWalletLookup(rawPhone: string) {
-    const cleanPhone = rawPhone.trim();
+async function performWalletLookup(rawPhone: string) {
+  const cleanPhone = rawPhone.trim();
 
-    if (!orgId) {
-      setWalletError("This RewardCircle page is missing an organization ID.");
-      return;
-    }
+  if (!orgId) {
+    setWalletError("This RewardCircle page is missing an organization ID.");
+    return;
+  }
 
-    if (!cleanPhone) {
-      setWalletError("Enter your phone number to connect your wallet.");
-      return;
-    }
+  if (!cleanPhone) {
+    setWalletError("Enter your phone number to connect your wallet.");
+    return;
+  }
 
-    setWalletLoading(true);
-    setWalletError(null);
+  setWalletLoading(true);
+  setWalletError(null);
 
-    try {
-      const res = await fetch(`/api/orgs/${orgId}/customer/reward-circle/me`, {
+  try {
+    const res = await fetch(
+      `/api/orgs/${orgId}/customer/reward-circle/lookup`,
+      {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          phone: cleanPhone,
+          type: "phone",
+          value: cleanPhone,
         }),
-      });
+      },
+    );
 
-      const data = (await res.json().catch(() => ({}))) as WalletResponse;
+    const data = (await res.json().catch(() => ({}))) as WalletResponse;
 
-      if (!res.ok) {
-        clearWalletState();
+    if (!res.ok || !data.found) {
+      clearWalletState();
 
-        const errorMessage =
-          "error" in data && data.error
-            ? data.error
-            : "We couldn’t find a RewardCircle wallet for that phone number yet.";
+      const errorMessage =
+        "error" in data && data.error
+          ? data.error
+          : "We couldn’t find a RewardCircle wallet for that phone number yet.";
 
-        setWalletError(errorMessage);
-        return;
-      }
-
-      if (!data.found) {
-        clearWalletState();
-        setWalletError(
-          data.error ||
-            "We couldn’t find a RewardCircle wallet for that phone number yet.",
-        );
-        return;
-      }
-
-      setMember(data.member);
-      setWallet(data.wallet);
-      setTierProgress(data.tierProgress);
-      setPhone(cleanPhone);
-    } catch (error: any) {
-      setWalletError(error?.message || "Failed to connect your wallet.");
-    } finally {
-      setWalletLoading(false);
+      setWalletError(errorMessage);
+      return;
     }
+
+    setMember(data.member);
+    setWallet(data.wallet);
+    setTierProgress(data.tierProgress);
+    setPhone(cleanPhone);
+  } catch (error: any) {
+    clearWalletState();
+    setWalletError(error?.message || "Failed to connect your wallet.");
+  } finally {
+    setWalletLoading(false);
   }
+}
 
   function handleWalletSubmit(event: FormEvent) {
     event.preventDefault();
@@ -512,13 +561,20 @@ export default function RewardCircleShopClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
-  useEffect(() => {
-    if (!initialContact || autoLookedUp) return;
+useEffect(() => {
+  if (autoLookedUp) return;
 
-    setAutoLookedUp(true);
+  setAutoLookedUp(true);
+
+  if (initialContact) {
     void performWalletLookup(initialContact);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialContact, autoLookedUp]);
+    return;
+  }
+
+  void loadSessionWallet();
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [initialContact, autoLookedUp]);
 
   return (
     <main className="min-h-screen overflow-hidden bg-slate-950 text-white">

@@ -12,8 +12,11 @@ import { getClientDb } from "@/lib/firebase-client";
  * Doctrine:
  * - members/{memberId} owns global member identity.
  * - members/{memberId}/orgLinks/{orgId} owns the member's relationship to the org.
- * - members/{memberId}/orgLinks/{orgId}/modules/rewardcircle/state owns canonical live RewardCircle state.
- * - orgs/{orgId}/modules/rewardcircle/... owns org-side RewardCircle config, programs, rewards, and admin read projections.
+ * - members/{memberId}/orgLinks/{orgId}/modules/rewardcircle/state/current owns canonical live RewardCircle state.
+ * - orgs/{orgId}/modules/rewardcircle/config/current owns RewardCircle module config.
+- orgs/{orgId}/modules/rewardcircle/programs owns RewardCircle programs.
+- orgs/{orgId}/modules/rewardcircle/rewards owns RewardCircle rewards.
+- orgs/{orgId}/modules/rewardcircle/memberStates/{memberId} owns admin/HQ read projections.
  * - orgs/{orgId}/modules/rewardcircle/memberStates/{memberId} is an org-side read projection for admin/HQ surfaces.
  * - activities/{activityId} owns activity/history records.
  */
@@ -46,6 +49,7 @@ export function rewardCircleStateRef(
     "modules",
     "rewardcircle",
     "state",
+    "current",
   );
 }
 
@@ -54,7 +58,15 @@ export function orgRef(orgId: string): DocumentReference {
 }
 
 export function rewardCircleConfigRef(orgId: string): DocumentReference {
-  return doc(getClientDb(), "orgs", orgId, "modules", "rewardcircle", "config");
+  return doc(
+    getClientDb(),
+    "orgs",
+    orgId,
+    "modules",
+    "rewardcircle",
+    "config",
+    "current",
+  );
 }
 
 export function rewardCircleProgramsCollection(
@@ -117,7 +129,7 @@ export function rewardCircleRewardRef(
  * Org-side RewardCircle member-state projection.
  *
  * Canonical state remains:
- * members/{memberId}/orgLinks/{orgId}/modules/rewardcircle/state
+ * members/{memberId}/orgLinks/{orgId}/modules/rewardcircle/state/current
  *
  * This projection exists so admin/HQ pages can efficiently list and summarize
  * RewardCircle members for a specific org.

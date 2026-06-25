@@ -85,7 +85,7 @@ export default function DevToolbar() {
   } catch (e: any) {
     setErr(e?.message || "Dev login failed");
   }
-}
+} 
 
   async function toggleOnOff(nextOn: boolean) {
     if (nextOn && !String(key).trim()) {

@@ -1,6 +1,5 @@
 import { headers as nextHeaders, cookies as nextCookies } from "next/headers";
-import { getAuth } from "firebase-admin/auth";
-import { adminDb } from "@/lib/firebase-admin";
+import { adminAuth, adminDb } from "@/lib/firebase-admin";
 
 const DEV_KEY = process.env.DEV_TEST_KEY || "";
 
@@ -154,7 +153,25 @@ export async function requireUser(req?: Request): Promise<AuthenticatedUser> {
   const token = match?.[1];
 
   if (token) {
-    const decoded = await getAuth().verifyIdToken(token);
+    const decoded = await adminAuth.verifyIdToken(token);
+
+    return {
+      uid: decoded.uid,
+      email: decoded.email,
+      name:
+        typeof decoded.name === "string"
+          ? decoded.name
+          : typeof decoded.firebase?.sign_in_provider === "string"
+            ? decoded.firebase.sign_in_provider
+            : undefined,
+      isDev: false,
+    };
+  }
+
+  const sessionCookie = view.readCookie("admin_session");
+
+  if (sessionCookie) {
+    const decoded = await adminAuth.verifySessionCookie(sessionCookie, true);
 
     return {
       uid: decoded.uid,

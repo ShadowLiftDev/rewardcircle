@@ -53,7 +53,7 @@ export type RewardCircleRewardWriteInput = {
 // -----------------------------------------------------------------------------
 
 function rewardCircleConfigRef(orgId: string) {
-  return adminDb.doc(`orgs/${orgId}/modules/rewardcircle/config`);
+  return adminDb.doc(`orgs/${orgId}/modules/rewardcircle/config/current`)
 }
 
 function rewardCircleProgramRef(orgId: string, programId: string) {

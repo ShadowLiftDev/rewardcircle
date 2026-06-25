@@ -343,7 +343,7 @@ export type FindOrCreateRewardCircleMemberInput = {
   staffName?: string;
 };
 
-export async function findOrCreateRewardCircleMember(
+export async function adminFindOrCreateRewardCircleMember(
   input: FindOrCreateRewardCircleMemberInput,
 ): Promise<RewardCircleMemberState> {
   const orgId = input.orgId;
@@ -634,7 +634,7 @@ export async function checkInRewardCircleMember(
   }
 
   if (!state && input.phone) {
-    state = await findOrCreateRewardCircleMember({
+    state = await adminFindOrCreateRewardCircleMember({
       orgId,
       phone: input.phone,
       displayName: input.displayName,

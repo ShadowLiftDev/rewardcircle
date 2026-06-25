@@ -96,12 +96,14 @@ function memberOrgLinkRef(memberId: string, orgId: string) {
 
 function rewardCircleStateRef(memberId: string, orgId: string) {
   return adminDb.doc(
-    `members/${memberId}/orgLinks/${orgId}/modules/rewardcircle/state`,
+    `members/${memberId}/orgLinks/${orgId}/modules/rewardcircle/state/current`,
   );
 }
 
 function rewardCircleConfigRef(orgId: string) {
-  return adminDb.doc(`orgs/${orgId}/modules/rewardcircle/config`);
+  return adminDb.doc(
+    `orgs/${orgId}/modules/rewardcircle/config/current`,
+  );
 }
 
 function rewardCircleProgramRef(orgId: string, programId: string) {
@@ -343,12 +345,16 @@ export async function findRewardCircleMemberByPhone(
   if (!orgId) throw new Error("Missing orgId.");
   if (!normalizedPhone) return null;
 
-  const snap = await membersCollection()
-    .where("phone", "==", normalizedPhone)
-    .limit(1)
-    .get();
+const snap = await membersCollection()
+  .where("phoneNormalized", "==", normalizedPhone)
+  .limit(2)
+  .get();
 
-  if (snap.empty) return null;
+if (snap.empty) return null;
+
+if (snap.size > 1) {
+  throw new Error("Multiple matching member records found.");
+}
 
   const memberDoc = snap.docs[0];
   const memberId = memberDoc.id;
@@ -373,7 +379,7 @@ export type FindOrCreateRewardCircleMemberInput = {
   staffName?: string;
 };
 
-export async function findOrCreateRewardCircleMember(
+export async function adminFindOrCreateRewardCircleMember(
   input: FindOrCreateRewardCircleMemberInput,
 ): Promise<RewardCircleMemberState> {
   const orgId = input.orgId;
@@ -404,15 +410,18 @@ export async function findOrCreateRewardCircleMember(
     const memberDoc = membersCollection().doc();
 
     await memberDoc.set(
-      {
+    {
         name: input.displayName || "RewardCircle Member",
+        displayName: input.displayName || "RewardCircle Member",
         phone,
+        phoneNormalized: phone,
         email: input.email || "",
+        emailNormalized: input.email ? input.email.trim().toLowerCase() : null,
         status: "active",
         createdAt: now,
         updatedAt: now,
-      },
-      { merge: true },
+    },
+    { merge: true },
     );
 
     memberId = memberDoc.id;
@@ -432,7 +441,7 @@ export async function findOrCreateRewardCircleMember(
       joinedAt: now,
       lastActiveAt: now,
       roleType: "customer",
-      tags: [],
+      tags: ["customer", "member"],
       status: "active",
       createdAt: now,
       updatedAt: now,
@@ -505,14 +514,18 @@ async function mergeRewardCircleMemberIdentity(input: {
   const snap = await memberRef(input.memberId).get();
   const existing = snap.exists ? snap.data() ?? {} : {};
 
-  const patch: Record<string, unknown> = {
-    phone: input.phone,
-    updatedAt: nowIso(),
-  };
+const emailNormalized = input.email ? input.email.trim().toLowerCase() : null;
 
-  if (input.email && !existing.email) {
-    patch.email = input.email;
-  }
+const patch: Record<string, unknown> = {
+  phone: input.phone,
+  phoneNormalized: input.phone,
+  updatedAt: nowIso(),
+};
+
+if (input.email && !existing.email) {
+  patch.email = input.email;
+  patch.emailNormalized = emailNormalized;
+}
 
   if (input.displayName && shouldReplaceGenericName(existing.name)) {
     patch.name = input.displayName;
@@ -673,7 +686,7 @@ export async function checkInRewardCircleMember(
   }
 
   if (!state && input.phone) {
-    state = await findOrCreateRewardCircleMember({
+    state = await adminFindOrCreateRewardCircleMember({
       orgId,
       phone: input.phone,
       displayName: input.displayName,

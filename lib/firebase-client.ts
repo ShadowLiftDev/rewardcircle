@@ -1,13 +1,12 @@
 "use client";
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
+import { getAuth, onAuthStateChanged, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 
 let app: FirebaseApp | null = null;
 
 function getFirebaseApp(): FirebaseApp {
-  // Safety: this should only ever run in the browser.
   if (typeof window === "undefined") {
     throw new Error(
       "getFirebaseApp() was called on the server. Use the Admin SDK on the server and firebase-client only in client components.",
@@ -61,4 +60,30 @@ export function getClientAuth(): Auth {
 
 export function getClientDb(): Firestore {
   return getFirestore(getFirebaseApp());
+}
+
+export async function getIdToken(forceRefresh = false): Promise<string | null> {
+  const auth = getClientAuth();
+
+  if (auth.currentUser) {
+    return auth.currentUser.getIdToken(forceRefresh);
+  }
+
+  return new Promise((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      unsubscribe();
+
+      if (!user) {
+        resolve(null);
+        return;
+      }
+
+      try {
+        const token = await user.getIdToken(forceRefresh);
+        resolve(token);
+      } catch {
+        resolve(null);
+      }
+    });
+  });
 }
